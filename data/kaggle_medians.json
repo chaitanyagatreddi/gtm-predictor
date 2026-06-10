@@ -1,0 +1,186 @@
+{
+  "india": {
+    "Google Ads": {
+      "Search": {
+        "avg_ctr": 0.0393,
+        "avg_cpc_usd": 1.81,
+        "avg_cpa_usd": 35.64,
+        "avg_roas": 3.73,
+        "sample_n": 26
+      },
+      "Video": {
+        "avg_ctr": 0.0328,
+        "avg_cpc_usd": 2.45,
+        "avg_cpa_usd": 48.97,
+        "avg_roas": 4.05,
+        "sample_n": 22
+      },
+      "Shopping": {
+        "avg_ctr": 0.032,
+        "avg_cpc_usd": 2.15,
+        "avg_cpa_usd": 50.53,
+        "avg_roas": 2.63,
+        "sample_n": 23
+      },
+      "Display": {
+        "avg_ctr": 0.0364,
+        "avg_cpc_usd": 2.43,
+        "avg_cpa_usd": 54.99,
+        "avg_roas": 2.35,
+        "sample_n": 25
+      }
+    },
+    "TikTok Ads": {
+      "Search": {
+        "avg_ctr": 0.0553,
+        "avg_cpc_usd": 1.11,
+        "avg_cpa_usd": 23.3,
+        "avg_roas": 8.16,
+        "sample_n": 24
+      },
+      "Video": {
+        "avg_ctr": 0.0578,
+        "avg_cpc_usd": 0.96,
+        "avg_cpa_usd": 21.92,
+        "avg_roas": 6.32,
+        "sample_n": 20
+      },
+      "Shopping": {
+        "avg_ctr": 0.0563,
+        "avg_cpc_usd": 0.89,
+        "avg_cpa_usd": 22.21,
+        "avg_roas": 5.08,
+        "sample_n": 18
+      },
+      "Display": {
+        "avg_ctr": 0.0636,
+        "avg_cpc_usd": 0.89,
+        "avg_cpa_usd": 14.98,
+        "avg_roas": 8.41,
+        "sample_n": 14
+      }
+    },
+    "Meta Ads": {
+      "Search": {
+        "avg_ctr": 0.0224,
+        "avg_cpc_usd": 1.31,
+        "avg_cpa_usd": 37.73,
+        "avg_roas": 4.27,
+        "sample_n": 23
+      },
+      "Video": {
+        "avg_ctr": 0.0256,
+        "avg_cpc_usd": 1.27,
+        "avg_cpa_usd": 40.73,
+        "avg_roas": 3.27,
+        "sample_n": 18
+      },
+      "Shopping": {
+        "avg_ctr": 0.024,
+        "avg_cpc_usd": 1.0,
+        "avg_cpa_usd": 24.2,
+        "avg_roas": 5.23,
+        "sample_n": 21
+      },
+      "Display": {
+        "avg_ctr": 0.0225,
+        "avg_cpc_usd": 1.23,
+        "avg_cpa_usd": 28.07,
+        "avg_roas": 6.46,
+        "sample_n": 27
+      }
+    }
+  },
+  "row": {
+    "Google Ads": {
+      "Search": {
+        "avg_ctr": 0.0404,
+        "avg_cpc_usd": 2.0,
+        "avg_cpa_usd": 44.47,
+        "avg_roas": 3.25,
+        "sample_n": 166
+      },
+      "Video": {
+        "avg_ctr": 0.0388,
+        "avg_cpc_usd": 2.08,
+        "avg_cpa_usd": 48.94,
+        "avg_roas": 2.94,
+        "sample_n": 164
+      },
+      "Shopping": {
+        "avg_ctr": 0.0393,
+        "avg_cpc_usd": 2.23,
+        "avg_cpa_usd": 49.64,
+        "avg_roas": 2.99,
+        "sample_n": 145
+      },
+      "Display": {
+        "avg_ctr": 0.0383,
+        "avg_cpc_usd": 2.22,
+        "avg_cpa_usd": 47.57,
+        "avg_roas": 2.78,
+        "sample_n": 149
+      }
+    },
+    "TikTok Ads": {
+      "Search": {
+        "avg_ctr": 0.0552,
+        "avg_cpc_usd": 0.96,
+        "avg_cpa_usd": 19.28,
+        "avg_roas": 7.69,
+        "sample_n": 101
+      },
+      "Video": {
+        "avg_ctr": 0.0495,
+        "avg_cpc_usd": 0.85,
+        "avg_cpa_usd": 20.86,
+        "avg_roas": 7.69,
+        "sample_n": 85
+      },
+      "Shopping": {
+        "avg_ctr": 0.0526,
+        "avg_cpc_usd": 1.05,
+        "avg_cpa_usd": 23.97,
+        "avg_roas": 5.2,
+        "sample_n": 101
+      },
+      "Display": {
+        "avg_ctr": 0.0502,
+        "avg_cpc_usd": 1.08,
+        "avg_cpa_usd": 23.14,
+        "avg_roas": 7.44,
+        "sample_n": 87
+      }
+    },
+    "Meta Ads": {
+      "Search": {
+        "avg_ctr": 0.0245,
+        "avg_cpc_usd": 1.31,
+        "avg_cpa_usd": 30.8,
+        "avg_roas": 4.78,
+        "sample_n": 137
+      },
+      "Video": {
+        "avg_ctr": 0.0247,
+        "avg_cpc_usd": 1.3,
+        "avg_cpa_usd": 29.52,
+        "avg_roas": 5.73,
+        "sample_n": 147
+      },
+      "Shopping": {
+        "avg_ctr": 0.0245,
+        "avg_cpc_usd": 1.29,
+        "avg_cpa_usd": 29.36,
+        "avg_roas": 4.44,
+        "sample_n": 139
+      },
+      "Display": {
+        "avg_ctr": 0.0255,
+        "avg_cpc_usd": 1.48,
+        "avg_cpa_usd": 31.02,
+        "avg_roas": 5.12,
+        "sample_n": 118
+      }
+    }
+  }
+}

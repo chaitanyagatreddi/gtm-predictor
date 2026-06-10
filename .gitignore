@@ -1,0 +1,40 @@
+# Env / secrets
+.env
+.env.local
+.env.production
+.env.*
+backend/.env
+lib/.env
+
+# Vercel
+.vercel/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS / editors
+.DS_Store
+*.swp
+*~
+.vscode/
+.idea/
+
+# Build / output
+dist/
+build/
+node_modules/
+
+# Raw / large datasets (kept locally; precomputed JSON ships)
+data/global_ads_performance_dataset.csv
+data/GoogleAds_DataAnalytics_Sales_Uncleaned.csv
+data/SAS_Dataset.csv
+data/my_google_ads/
+data/appknox_sem/
+
+# Test results / logs
+/tmp/
+*.log

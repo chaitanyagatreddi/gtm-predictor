@@ -1,0 +1,13 @@
+lib/.env
+lib/__pycache__
+**/__pycache__
+*.pyc
+.venv
+node_modules
+.DS_Store
+frontend
+data/GoogleAds_DataAnalytics_Sales_Uncleaned.csv
+data/SAS_Dataset.csv
+data/global_ads_performance_dataset.csv
+data/my_google_ads
+data/appknox_sem

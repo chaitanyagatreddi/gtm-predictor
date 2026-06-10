@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>GTM Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Rubik:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Tide-inspired design system */
+:root{
+  --primary:#1929D6;
+  --primary-hover:#0F1FB0;
+  --secondary:#DDE8FF;
+  --accent:#F0F4FF;
+  --bg:#FFFFFF;
+  --surface:#F8FAFC;
+  --border:#E2E8F0;
+  --text:#0F172A;
+  --text-muted:#64748B;
+  --radius:16px;
+  --radius-sm:10px;
+}
+*{box-sizing:border-box}
+body{font-family:'Figtree',-apple-system,sans-serif;max-width:1000px;margin:2rem auto;padding:1.5rem;background:var(--bg);color:var(--text);font-size:16px;line-height:1.5}
+h1{font-family:'Rubik',sans-serif;font-size:2.5rem;font-weight:800;color:var(--text);letter-spacing:-0.02em;margin:0 0 .5rem}
+h3{font-family:'Rubik',sans-serif;font-weight:700;color:var(--text);letter-spacing:-0.01em}
+.subtitle{color:var(--text-muted);font-size:1.05rem;margin:0 0 2rem}
+
+.tabs{display:flex;gap:.4rem;margin-bottom:1.5rem;flex-wrap:wrap;background:var(--accent);padding:.4rem;border-radius:var(--radius)}
+.tabs button{background:transparent;color:var(--text-muted);border:none;padding:.65rem 1.1rem;cursor:pointer;border-radius:var(--radius-sm);font-family:'Figtree',sans-serif;font-weight:600;font-size:.92rem;transition:all .15s}
+.tabs button:hover{color:var(--primary)}
+.tabs button.active{background:var(--primary);color:white;box-shadow:0 4px 12px rgba(25,41,214,.25)}
+
+.panel{display:none;background:var(--bg);padding:2rem;border-radius:var(--radius);border:1px solid var(--border);box-shadow:0 1px 3px rgba(15,23,42,.04)}
+.panel.active{display:block}
+
+label{display:block;margin:1rem 0 .35rem;font-size:.85rem;color:var(--text);font-weight:600}
+input,select,textarea{width:100%;padding:.7rem .9rem;background:var(--bg);border:1.5px solid var(--border);color:var(--text);border-radius:var(--radius-sm);font-family:'Figtree',sans-serif;font-size:.95rem;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--accent)}
+textarea{min-height:100px;line-height:1.5}
+
+button.go{margin-top:1.25rem;background:var(--primary);color:white;border:none;padding:.85rem 1.5rem;border-radius:var(--radius-sm);cursor:pointer;font-family:'Figtree',sans-serif;font-weight:700;font-size:.95rem;letter-spacing:-0.005em;transition:background .15s;box-shadow:0 4px 12px rgba(25,41,214,.2)}
+button.go:hover{background:var(--primary-hover)}
+
+pre{background:var(--surface);padding:1rem;border-radius:var(--radius-sm);overflow-x:auto;font-size:.82rem;margin-top:1rem;border:1px solid var(--border);color:var(--text);font-family:'SF Mono','Monaco',monospace}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+
+/* Scorecard rendering — Tide light theme */
+.scorecard{margin-top:1.5rem}
+.overall{display:flex;align-items:center;gap:1.5rem;background:linear-gradient(135deg,var(--accent),var(--secondary));padding:1.75rem 2rem;border-radius:var(--radius);color:var(--text);margin-bottom:1.25rem;border:1px solid var(--border)}
+.overall .big{font-family:'Rubik',sans-serif;font-size:4.5rem;font-weight:800;line-height:1;color:var(--primary);letter-spacing:-0.03em}
+.overall .big small{font-size:1.5rem;color:var(--text-muted);font-weight:500}
+.overall .lbl{color:var(--primary);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700}
+.overall .sub{color:var(--text-muted);font-size:.95rem;margin-top:.25rem;font-weight:500}
+
+.dim{background:#fff;color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1.25rem 1.5rem;margin-bottom:.85rem;box-shadow:0 1px 3px rgba(15,23,42,.04)}
+.dim-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:.85rem;border-bottom:1px solid #eee;padding-bottom:.6rem}
+.dim-name{font-weight:700;font-size:1.05rem;color:#111;text-transform:capitalize}
+.dim-score{display:flex;align-items:center;gap:.75rem}
+.score-pill{font-weight:800;font-size:1.4rem;padding:.35rem .8rem;border-radius:8px;color:white;min-width:60px;text-align:center}
+.score-bar{width:120px;height:10px;background:#eee;border-radius:5px;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:5px;transition:width .4s}
+
+.dim-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin:.75rem 0}
+.dim-grid > div{background:#f8f9fb;padding:.7rem .9rem;border-radius:6px;font-size:.88rem;color:#222;line-height:1.4}
+.dim-grid .lbl{color:#666;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.3rem;font-weight:700}
+
+.fix-box{background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;padding:.85rem 1rem;border-radius:6px;margin-top:.75rem;font-size:.9rem;color:#1e293b}
+.fix-box .lbl{color:#1e40af;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;margin-bottom:.4rem}
+.fix-before{color:#991b1b;background:#fef2f2;padding:.35rem .55rem;border-radius:4px;text-decoration:line-through;margin:.3rem 0;font-family:ui-monospace,monospace;font-size:.83rem}
+.fix-after{color:#065f46;background:#ecfdf5;padding:.45rem .6rem;border-radius:4px;font-weight:600;margin:.3rem 0;font-family:ui-monospace,monospace;font-size:.85rem}
+.fix-why{color:#475569;font-size:.82rem;margin-top:.5rem;line-height:1.45;font-style:italic}
+.fix-meta{display:flex;gap:.5rem;font-size:.72rem;margin-top:.6rem;flex-wrap:wrap}
+.fix-meta span{background:#1e293b;color:#e2e8f0;padding:.25rem .6rem;border-radius:4px;font-weight:600}
+.fix-meta .lift{background:#065f46;color:#a7f3d0}
+.fix-meta .impact-high{background:#991b1b;color:#fecaca}
+.fix-meta .impact-med{background:#92400e;color:#fde68a}
+.fix-meta .impact-low{background:#1e3a8a;color:#bfdbfe}
+
+.priority{background:linear-gradient(135deg,#7c3aed,#4f46e5);color:white;border-radius:10px;padding:1.25rem 1.5rem;margin-top:1.25rem;box-shadow:0 4px 20px rgba(79,70,229,.3)}
+.priority h3{margin:0 0 .85rem;font-size:1rem;text-transform:uppercase;letter-spacing:.08em;font-weight:800}
+.priority ol{margin:0;padding-left:1.5rem}
+.priority li{margin:.6rem 0;font-size:.92rem;line-height:1.4}
+.priority .lift{color:#a7f3d0;font-weight:700;margin-left:.4rem;font-size:.8rem;background:rgba(0,0,0,.2);padding:.15rem .5rem;border-radius:3px}
+.priority .first-step{color:rgba(255,255,255,.85);font-size:.82rem;margin-top:.2rem}
+
+.toggle-raw{font-size:.75rem;color:#666;cursor:pointer;margin-top:1rem;text-decoration:underline;display:inline-block}
+/* Gate overlay */
+.gate-overlay{position:fixed;inset:0;background:linear-gradient(135deg,var(--accent),var(--secondary));display:flex;align-items:center;justify-content:center;z-index:9999;font-family:'Figtree',sans-serif}
+.gate-card{background:#fff;border-radius:var(--radius);padding:2.5rem;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(25,41,214,.15);border:1px solid var(--border)}
+.gate-card h2{font-family:'Rubik',sans-serif;font-size:1.8rem;font-weight:800;margin:0 0 .5rem;color:var(--primary);letter-spacing:-0.02em}
+.gate-card p{color:var(--text-muted);font-size:.95rem;margin:0 0 1.5rem}
+.gate-card input{font-size:1rem;padding:.85rem 1rem}
+.gate-card button{width:100%;margin-top:1rem}
+.gate-err{color:#ef4444;font-size:.85rem;margin-top:.75rem;font-weight:600}
+.gate-loading{color:var(--text-muted);font-size:.85rem;margin-top:.75rem}
+</style></head><body>
+
+<div id="gate" class="gate-overlay">
+  <div class="gate-card">
+    <h2>GTM Predictor</h2>
+    <p>Quick intro — then you're in.</p>
+    <input id="gate_name" type="text" placeholder="Full name" autocomplete="name" autofocus>
+    <input id="gate_email" type="email" placeholder="Work email" autocomplete="email" style="margin-top:.6rem">
+    <input id="gate_role" type="text" placeholder="Role (Marketing, Sales, Eng...)" style="margin-top:.6rem">
+    <input id="gate_title" type="text" placeholder="Title (Head of Growth, VP Sales...)" style="margin-top:.6rem">
+    <button class="go" onclick="gateSubmit()">Continue →</button>
+    <div id="gate_msg"></div>
+  </div>
+</div>
+
+<script>
+const GATE_KEY = "gtm_gate_v1";
+function gateCheck(){
+  const stored = localStorage.getItem(GATE_KEY);
+  if(stored){ document.getElementById('gate').style.display='none'; return true; }
+  return false;
+}
+async function gateSubmit(){
+  const get = id => document.getElementById(id).value.trim();
+  const email = get('gate_email').replace(/[​-‍﻿\s]/g, '').toLowerCase();
+  const name = get('gate_name');
+  const role = get('gate_role');
+  const title = get('gate_title');
+  const msg = document.getElementById('gate_msg');
+  if(!name){ msg.innerHTML = '<div class="gate-err">Name required</div>'; return; }
+  if(!email || !email.includes('@')){ msg.innerHTML = '<div class="gate-err">Valid work email required</div>'; return; }
+  if(!role){ msg.innerHTML = '<div class="gate-err">Role required</div>'; return; }
+  if(!title){ msg.innerHTML = '<div class="gate-err">Title required</div>'; return; }
+  msg.innerHTML = '<div class="gate-loading">Logging you in...</div>';
+  try{
+    const r = await fetch('/gate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,name,role,title})});
+    const data = await r.json();
+    if(data.ok){
+      localStorage.setItem(GATE_KEY, email);
+      document.getElementById('gate').style.display='none';
+    } else {
+      msg.innerHTML = '<div class="gate-err">Access denied</div>';
+    }
+  } catch(e){
+    msg.innerHTML = '<div class="gate-err">Network error — '+e.message+'</div>';
+  }
+}
+document.getElementById('gate_email')?.addEventListener('keydown', e => { if(e.key==='Enter') gateSubmit(); });
+window.addEventListener('DOMContentLoaded', gateCheck);
+</script>
+
+<h1>GTM Predictor</h1>
+<p class="subtitle">Spend, score, and ship — all in one place</p>
+<div class="tabs">
+  <button class="active" onclick="show('ppc')">PPC</button>
+  <button onclick="show('abm')">ABM</button>
+  <button onclick="show('cro')">CRO score</button>
+  <button onclick="show('creative')">Creative score</button>
+  <button onclick="show('lifecycle')">Outbound</button>
+  <button onclick="show('ltvcac')">LTV/CAC</button>
+</div>
+
+<div id="ppc" class="panel active">
+  <div class="row">
+    <div><label>Budget USD</label><input id="p_budget" type="number" value="10000"></div>
+    <div><label>Channel</label><select id="p_channel">
+      <option value="linkedin">LinkedIn</option>
+      <option value="google_search">Google Search</option>
+      <option value="google_display">Google Display</option>
+      <option value="meta">Meta</option>
+      <option value="tiktok">TikTok</option>
+    </select></div>
+    <div><label>Region</label><select id="p_region">
+      <option value="row">ROW (US/UK/EU/etc)</option>
+      <option value="india">India</option>
+    </select></div>
+    <div><label>ICP</label><select id="p_icp">
+      <option value="b2b_saas">B2B SaaS</option>
+      <option value="b2c_saas">B2C AI SaaS (Writesonic real data)</option>
+    </select></div>
+    <div><label>CRO score (0-1)</label><input id="p_cro" type="number" step="0.1" value="0.5"></div>
+    <div><label>Creative score (0-1)</label><input id="p_creative" type="number" step="0.1" value="0.5"></div>
+    <div><label>ACV USD</label><input id="p_acv" type="number" value="10000"></div>
+  </div>
+  <button class="go" onclick="run('ppc')">Predict</button>
+  <pre id="p_out"></pre>
+</div>
+
+<div id="abm" class="panel">
+  <h3 style="margin-top:0;color:#a78bfa">ABM Predictor — ZenABM 2026 real data (n=211, $5.5M spend)</h3>
+  <div class="row">
+    <div><label>Budget USD</label><input id="a_budget" type="number" value="50000"></div>
+    <div><label>Target accounts</label><input id="a_accts" type="number" value="200"></div>
+    <div><label>ACV USD</label><input id="a_acv" type="number" value="50000"></div>
+    <div><label>Ad format</label><select id="a_format">
+      <option value="thought_leader">Thought Leader (best CTR 2.68%)</option>
+      <option value="single_image">Single Image</option>
+      <option value="carousel">Carousel</option>
+      <option value="video">Video</option>
+      <option value="document">Document</option>
+      <option value="event">Event</option>
+      <option value="text">Text (cheapest CPM)</option>
+    </select></div>
+    <div><label>Region</label><select id="a_region">
+      <option value="north_america">North America (CPL $200-250)</option>
+      <option value="europe">Europe (CPL $120-150)</option>
+      <option value="apac">APAC / India (CPL $80-120)</option>
+      <option value="latam">LATAM (CPL $60-90)</option>
+    </select></div>
+    <div><label>Offer type</label><select id="a_offer">
+      <option value="demo_high_commitment">Demo (2-5% conv)</option>
+      <option value="content_low_friction">Content/Guide (10-15% conv)</option>
+      <option value="lead_gen_form">Lead Gen Form (~10% conv)</option>
+    </select></div>
+    <div><label>CRO score (0-1)</label><input id="a_cro" type="number" step="0.1" value="0.5"></div>
+    <div><label>Creative score (0-1)</label><input id="a_creative" type="number" step="0.1" value="0.5"></div>
+  </div>
+  <button class="go" onclick="run('abm')">Predict from budget</button>
+  <pre id="a_out"></pre>
+
+  <hr style="border:none;border-top:1px solid #333;margin:1.5rem 0">
+  <h3 style="color:#a78bfa">Reverse: I want X deals — what spend do I need?</h3>
+  <div class="row">
+    <div><label>Target deals</label><input id="ag_deals" type="number" value="5"></div>
+    <div><label>ACV USD</label><input id="ag_acv" type="number" value="50000"></div>
+  </div>
+  <button class="go" onclick="run('abmgoal')">Reverse-engineer spend</button>
+  <pre id="ag_out"></pre>
+</div>
+
+<div id="cro" class="panel">
+  <label>Landing page URL</label><input id="c_url" placeholder="https://yourpage.com">
+  <button class="go" onclick="run('cro')">Score</button>
+  <pre id="c_out"></pre>
+</div>
+
+<div id="creative" class="panel">
+  <label>Channel</label><select id="cr_channel">
+    <option value="linkedin">LinkedIn</option><option value="google">Google</option><option value="meta">Meta</option>
+  </select>
+  <label>Ad copy</label><textarea id="cr_copy"></textarea>
+  <label>Image description (optional)</label><textarea id="cr_img"></textarea>
+  <button class="go" onclick="run('creative')">Score</button>
+  <pre id="cr_out"></pre>
+</div>
+
+<div id="lifecycle" class="panel">
+  <h3 style="margin-top:0;color:#a78bfa">Outbound Email Scorer — single cold email</h3>
+  <label>Subject line</label><input id="lc_subject" placeholder="e.g. Navigating post-IOS14 data chaos?">
+  <label>Goal (what action you want)</label><select id="lc_goal">
+    <option value="book_demo">Book a demo</option>
+    <option value="reply">Get a reply</option>
+    <option value="download">Download asset</option>
+    <option value="click_link">Click to landing page</option>
+    <option value="warm_intro">Get warm intro</option>
+  </select>
+  <label>Body</label><textarea id="lc_seq" style="min-height:250px" placeholder="Hey {First Name}&#10;&#10;Hook line about their pain...&#10;&#10;Why us + 3 specific proof points with numbers...&#10;&#10;CTA + P.S."></textarea>
+  <label>Landing page URL (optional)</label><input id="lc_lp" placeholder="https://...">
+  <div class="row">
+    <div><label>Assumed open rate %</label><input id="lc_open" type="number" step="1" value="30"></div>
+    <div><label>Assumed click rate %</label><input id="lc_click" type="number" step="1" value="3"></div>
+  </div>
+  <label>Re-engagement trigger (optional)</label><input id="lc_trigger" placeholder="e.g. opened but didn't click → bump after 3 days">
+  <button class="go" onclick="run('lifecycle')">Score outbound email</button>
+  <pre id="lc_out"></pre>
+</div>
+
+<div id="ltvcac" class="panel">
+  <h3 style="margin-top:0;color:#a78bfa;font-size:1.3rem;font-weight:700">LTV:CAC Ratio Calculator</h3>
+  <p style="color:#94a3b8;font-size:.9rem;margin:.25rem 0 1.5rem">Inspired by <a href="https://portermetrics.com/en/free-tools/calculators/free-cacltv-ratio/" target="_blank" style="color:#60a5fa">Porter Metrics</a> · formula <a href="https://www.wallstreetprep.com/knowledge/ltv-cac-ratio/" target="_blank" style="color:#60a5fa">Wall Street Prep</a></p>
+
+  <div style="background:#1a1a2e;border:1px solid #2d2d4d;border-radius:10px;padding:1.5rem;margin-bottom:1rem">
+    <div style="display:flex;gap:.5rem;margin-bottom:1rem">
+      <button type="button" id="lt_mode_simple" onclick="ltMode('simple')" style="flex:1;background:#4f46e5;color:white;border:none;padding:.6rem;border-radius:6px;cursor:pointer;font-weight:600">Simple (2 inputs)</button>
+      <button type="button" id="lt_mode_full" onclick="ltMode('full')" style="flex:1;background:#222;color:#aaa;border:1px solid #333;padding:.6rem;border-radius:6px;cursor:pointer">Calculate LTV from inputs</button>
+    </div>
+
+    <div id="lt_simple_block">
+      <div class="row">
+        <div>
+          <label style="color:#aaa;font-size:.9rem">Customer Acquisition Cost (CAC) $</label>
+          <input id="lt_cac_simple" type="number" value="200" style="font-size:1.1rem">
+          <div style="font-size:.72rem;color:#666;margin-top:.25rem">Total cost to acquire one new customer</div>
+        </div>
+        <div>
+          <label style="color:#aaa;font-size:.9rem">Customer Lifetime Value (LTV) $</label>
+          <input id="lt_ltv_simple" type="number" value="800" style="font-size:1.1rem">
+          <div style="font-size:.72rem;color:#666;margin-top:.25rem">Total revenue from one customer over their lifetime</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="lt_full_block" style="display:none">
+      <div class="row">
+        <div><label>CAC ($)</label><input id="lt_cac" type="number" value="200"></div>
+        <div><label>Monthly ARPU ($)</label><input id="lt_arpu" type="number" value="50"></div>
+        <div><label>Monthly churn (0.05 = 5%)</label><input id="lt_churn" type="number" step="0.01" value="0.05"></div>
+        <div><label>Gross margin (0.80 = 80%)</label><input id="lt_gm" type="number" step="0.01" value="0.80"></div>
+        <div><label>Trial → paid rate (optional)</label><input id="lt_t2p" type="number" step="0.01" value="0.15"></div>
+        <div><label>Expansion rate (optional)</label><input id="lt_exp" type="number" step="0.01" value="0"></div>
+        <div><label>Referral rate (optional)</label><input id="lt_ref" type="number" step="0.01" value="0"></div>
+        <div><label>Activation rate (info only)</label><input id="lt_act" type="number" step="0.01" value="0.40"></div>
+      </div>
+    </div>
+  </div>
+
+  <button class="go" onclick="run('ltvcac')" style="width:100%;font-size:1rem;padding:.8rem">Calculate Ratio</button>
+  <pre id="lt_out"></pre>
+</div>
+
+<script>
+function show(t){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  document.getElementById(t).classList.add('active');
+  event.target.classList.add('active');
+}
+async function post(url,body){
+  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return r.json();
+}
+function scoreClass(s){return s>=8?'s-high':s>=5?'s-mid':'s-low'}
+function scoreColor(s){return s>=8?'#10b981':s>=5?'#f59e0b':'#ef4444'}
+function fmt(n){return typeof n==='number'?n.toLocaleString('en-US',{maximumFractionDigits:2}):n}
+function fmtUsd(n){return n==null?'—':'$'+fmt(n)}
+
+let ltvMode = 'simple';
+function ltMode(m){
+  ltvMode = m;
+  document.getElementById('lt_simple_block').style.display = m==='simple'?'block':'none';
+  document.getElementById('lt_full_block').style.display = m==='full'?'block':'none';
+  const simple = document.getElementById('lt_mode_simple');
+  const full = document.getElementById('lt_mode_full');
+  simple.style.background = m==='simple'?'#4f46e5':'#222';
+  simple.style.color = m==='simple'?'white':'#aaa';
+  full.style.background = m==='full'?'#4f46e5':'#222';
+  full.style.color = m==='full'?'white':'#aaa';
+}
+
+function renderABM(d){
+  if(!d || d.mode !== 'abm') return null;
+  const tone = d.roi >= 1.5 ? '#10b981' : d.roi >= 1 ? '#f59e0b' : '#ef4444';
+  let html = `<div class="scorecard">
+    <div class="overall" style="background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff">
+      <div>
+        <div class="lbl" style="color:#94a3b8">Pipeline range</div>
+        <div style="font-size:2rem;font-weight:800;color:#a78bfa">${fmtUsd(d.pipeline_estimated_usd)} <span style="color:#64748b;font-size:1rem">→</span> ${fmtUsd(d.pipeline_top_performer_usd)}</div>
+        <div class="sub" style="color:#94a3b8">median → top performer · ZenABM 2026 (n=211)</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:.6rem;margin-bottom:1rem">
+      ${[
+        ['Accounts reached', d.accounts_reached, '#3b82f6'],
+        ['Engaged', d.accounts_engaged, '#8b5cf6'],
+        ['MQAs', d.mqa, '#ec4899'],
+        ['Opps', d.opps, '#f59e0b'],
+        ['Closed Won', d.closed_won, '#10b981'],
+      ].map(([l,v,c])=>`<div style="background:#fff;color:#111;border-radius:8px;padding:.85rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2)">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;letter-spacing:.05em;font-weight:700">${l}</div>
+        <div style="font-size:1.6rem;font-weight:800;color:${c};margin-top:.2rem">${fmt(v)}</div>
+      </div>`).join('')}
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1rem">
+      <div style="background:#fff;color:#111;border-radius:8px;padding:.85rem">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;font-weight:700">Revenue</div>
+        <div style="font-size:1.4rem;font-weight:800;color:#065f46">${fmtUsd(d.revenue_usd)}</div>
+      </div>
+      <div style="background:#fff;color:#111;border-radius:8px;padding:.85rem">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;font-weight:700">CAC</div>
+        <div style="font-size:1.4rem;font-weight:800;color:#1e40af">${fmtUsd(d.cac_usd)}</div>
+      </div>
+      <div style="background:#fff;color:#111;border-radius:8px;padding:.85rem">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;font-weight:700">ROI</div>
+        <div style="font-size:1.4rem;font-weight:800;color:${tone}">${d.roi}x</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;color:#111;border-radius:8px;padding:1rem;margin-bottom:.75rem">
+      <div style="font-size:.75rem;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:.5rem">Benchmark assumptions used</div>
+      <table style="width:100%;font-size:.85rem;border-collapse:collapse">
+        <tr><td style="padding:.3rem 0;color:#666">CPM (ZenABM)</td><td style="text-align:right;font-weight:600">${fmtUsd(d.assumptions.cpm_zenabm)}</td></tr>
+        <tr><td style="padding:.3rem 0;color:#666">CPC (ZenABM)</td><td style="text-align:right;font-weight:600">${fmtUsd(d.assumptions.cpc_zenabm)}</td></tr>
+        <tr><td style="padding:.3rem 0;color:#666">CTR (ZenABM)</td><td style="text-align:right;font-weight:600">${(d.assumptions.ctr_zenabm*100).toFixed(2)}%</td></tr>
+        <tr><td style="padding:.3rem 0;color:#666">Conversion rate</td><td style="text-align:right;font-weight:600">${(d.assumptions.conv_rate_zenabm*100).toFixed(1)}%</td></tr>
+        <tr><td style="padding:.3rem 0;color:#666">Ad format</td><td style="text-align:right;font-weight:600">${d.assumptions.ad_format}</td></tr>
+        <tr><td style="padding:.3rem 0;color:#666">Region · Offer</td><td style="text-align:right;font-weight:600">${d.assumptions.region} · ${d.assumptions.offer}</td></tr>
+      </table>
+    </div>
+
+    <div style="font-size:.78rem;color:#888;padding:.5rem 0">
+      <strong style="color:#a78bfa">Source:</strong> ${d.source_label || ''}<br>
+      ${(d.sources||[]).map(s=>`<a href="${s}" target="_blank" style="color:#60a5fa;text-decoration:none">${s}</a>`).join(' · ')}
+    </div>
+
+    <div class="toggle-raw" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Show raw JSON</div>
+    <pre style="display:none">${JSON.stringify(d,null,2)}</pre>
+  </div>`;
+  return html;
+}
+
+function renderPPC(d){
+  if(!d || d.mode !== 'ppc') return null;
+  const tone = d.roi >= 1.5 ? '#10b981' : d.roi >= 1 ? '#f59e0b' : '#ef4444';
+  const srcTier = d.data_source || '';
+  const tierColor = srcTier.includes('real') ? '#10b981' : srcTier.includes('kaggle') ? '#f59e0b' : '#64748b';
+  const a = d.assumptions || {};
+  // derived metrics
+  const cpm = d.impressions ? (d.budget_usd / d.impressions * 1000) : 0;
+  const cpl = d.leads_mql ? (d.budget_usd / d.leads_mql) : 0;
+  const cpo = d.opps ? (d.budget_usd / d.opps) : 0;
+
+  const step = (label, value, color, rate) => `
+    <div style="display:flex;align-items:center;gap:.5rem">
+      <div style="background:#fff;color:#111;border-radius:8px;padding:.75rem 1rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2);flex:1">
+        <div style="font-size:.65rem;color:#666;text-transform:uppercase;letter-spacing:.05em;font-weight:700">${label}</div>
+        <div style="font-size:1.4rem;font-weight:800;color:${color};margin-top:.15rem">${value}</div>
+      </div>
+      ${rate ? `<div style="color:#64748b;font-size:.75rem;font-weight:700;white-space:nowrap;text-align:center;padding:0 .3rem">${rate}<br>↓</div>` : ''}
+    </div>`;
+
+  return `<div class="scorecard">
+    <div class="overall" style="background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff">
+      <div style="flex:1">
+        <div class="lbl" style="color:#94a3b8">Revenue projection · ${d.channel} · ${d.region}</div>
+        <div style="font-size:2.4rem;font-weight:800;color:#a78bfa">${fmtUsd(d.revenue_usd)}</div>
+        <div class="sub" style="color:#94a3b8">on ${fmtUsd(d.budget_usd)} spend · <span style="background:${tierColor};color:#fff;padding:.15rem .5rem;border-radius:3px;font-size:.7rem;font-weight:700">${srcTier}</span></div>
+      </div>
+      <div style="text-align:right">
+        <div class="lbl" style="color:#94a3b8">ROI</div>
+        <div style="font-size:2.4rem;font-weight:800;color:${tone}">${d.roi}x</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;color:#111;border-radius:10px;padding:1rem 1.25rem;margin-bottom:1rem;box-shadow:0 2px 12px rgba(0,0,0,.25)">
+      <div style="font-size:.75rem;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:.75rem">Spend → Won funnel (with conversion at each step)</div>
+      <div style="display:grid;grid-template-rows:auto;gap:.4rem">
+        ${step('💰 Spend', fmtUsd(d.budget_usd), '#0ea5e9', `CPM ${fmtUsd(cpm)}`)}
+        ${step('👁 Impressions', fmt(d.impressions), '#3b82f6', `CTR ${(a.ctr*100).toFixed(2)}%`)}
+        ${step('🖱 Clicks', fmt(d.clicks), '#8b5cf6', `Click→Lead ${(a.click_to_lead*100).toFixed(1)}%  ·  CPL ${fmtUsd(cpl)}`)}
+        ${step('📋 Leads (MQL)', fmt(d.leads_mql), '#ec4899', `MQL→SQL ${(a.mql_to_sql*100).toFixed(0)}%`)}
+        ${step('✅ SQLs', fmt(d.sqls), '#f59e0b', `SQL→Opp ${(a.sql_to_opp*100).toFixed(0)}%  ·  Cost/Opp ${fmtUsd(cpo)}`)}
+        ${step('💼 Opps', fmt(d.opps), '#7c3aed', `Opp→Won ${(a.opp_to_won*100).toFixed(0)}%`)}
+        ${step('🏆 Closed Won', fmt(d.closed_won), '#10b981', null)}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1rem">
+      <div style="background:#fff;color:#111;border-radius:8px;padding:.85rem">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;font-weight:700">CAC</div>
+        <div style="font-size:1.6rem;font-weight:800;color:#1e40af">${fmtUsd(d.cac_usd)}</div>
+        ${d.cac_note ? `<div style="font-size:.7rem;color:#991b1b;margin-top:.3rem">${d.cac_note}</div>`:''}
+      </div>
+      <div style="background:#fff;color:#111;border-radius:8px;padding:.85rem">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;font-weight:700">Revenue</div>
+        <div style="font-size:1.6rem;font-weight:800;color:#065f46">${fmtUsd(d.revenue_usd)}</div>
+        <div style="font-size:.7rem;color:#666;margin-top:.2rem">ACV ${fmtUsd(a.acv_usd)} × ${fmt(d.closed_won)} deals</div>
+      </div>
+      <div style="background:#fff;color:#111;border-radius:8px;padding:.85rem">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;font-weight:700">ROI</div>
+        <div style="font-size:1.6rem;font-weight:800;color:${tone}">${d.roi}x</div>
+        <div style="font-size:.7rem;color:#666;margin-top:.2rem">Revenue ÷ Spend</div>
+      </div>
+    </div>
+
+    <div style="background:#fff;color:#111;border-radius:8px;padding:1rem;margin-bottom:.75rem">
+      <div style="font-size:.75rem;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:.5rem">Assumptions</div>
+      <table style="width:100%;font-size:.85rem;border-collapse:collapse">
+        <tr><td style="padding:.25rem 0;color:#666">CPC</td><td style="text-align:right;font-weight:600">${fmtUsd(d.assumptions.cpc)}</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">CTR</td><td style="text-align:right;font-weight:600">${(d.assumptions.ctr*100).toFixed(2)}%</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">Click→Lead</td><td style="text-align:right;font-weight:600">${(d.assumptions.click_to_lead*100).toFixed(2)}%</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">MQL→SQL · SQL→Opp · Opp→Won</td><td style="text-align:right;font-weight:600">${(d.assumptions.mql_to_sql*100).toFixed(0)}% · ${(d.assumptions.sql_to_opp*100).toFixed(0)}% · ${(d.assumptions.opp_to_won*100).toFixed(0)}%</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">ACV</td><td style="text-align:right;font-weight:600">${fmtUsd(d.assumptions.acv_usd)}</td></tr>
+      </table>
+    </div>
+
+    <div style="font-size:.78rem;color:#888;padding:.5rem 0">
+      <strong style="color:#a78bfa">Sources:</strong>
+      ${(d.sources||[]).map(s=>s.startsWith('http')?`<a href="${s}" target="_blank" style="color:#60a5fa;text-decoration:none;display:block">${s}</a>`:`<div>${s}</div>`).join('')}
+    </div>
+
+    <div class="toggle-raw" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Show raw JSON</div>
+    <pre style="display:none">${JSON.stringify(d,null,2)}</pre>
+  </div>`;
+}
+
+function renderLTVCACSimple(d){
+  if(!d || d.mode !== 'simple') return null;
+  const color = d.verdict === 'healthy' ? '#10b981' : d.verdict === 'under_investing' ? '#f59e0b' : d.verdict === 'borderline' ? '#f59e0b' : '#ef4444';
+  return `<div class="scorecard">
+    <div style="background:#fff;border-radius:12px;padding:2rem;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.3);margin-bottom:1rem">
+      <div style="font-size:.85rem;color:#666;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:.5rem">LTV:CAC Ratio</div>
+      <div style="font-size:5rem;font-weight:800;color:${color};line-height:1;margin:.5rem 0">${d.ratio_display}</div>
+      <div style="font-size:.95rem;color:#333;max-width:600px;margin:1rem auto 0;line-height:1.5">${d.interpretation}</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-bottom:1rem">
+      <div style="background:#fff;color:#111;border-radius:8px;padding:1rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2)">
+        <div style="font-size:.75rem;color:#666;text-transform:uppercase;font-weight:700">CAC</div>
+        <div style="font-size:2rem;font-weight:800;color:#1e40af;margin-top:.25rem">${fmtUsd(d.cac_usd)}</div>
+      </div>
+      <div style="background:#fff;color:#111;border-radius:8px;padding:1rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2)">
+        <div style="font-size:.75rem;color:#666;text-transform:uppercase;font-weight:700">LTV</div>
+        <div style="font-size:2rem;font-weight:800;color:#065f46;margin-top:.25rem">${fmtUsd(d.ltv_usd)}</div>
+      </div>
+    </div>
+
+    <div style="font-size:.78rem;color:#888;padding:.5rem 0">
+      <strong style="color:#a78bfa">Sources:</strong>
+      ${(d.sources||[]).map(s=>{const m=s.match(/https?:\/\/[^\s]+/);return m?`<a href="${m[0]}" target="_blank" style="color:#60a5fa;text-decoration:none;display:block">${s}</a>`:`<div>${s}</div>`}).join('')}
+    </div>
+  </div>`;
+}
+
+function renderLTVCAC(d){
+  if(!d || d.ltv_cac_ratio == null) return null;
+  const verdictColor = {
+    excellent: '#10b981',
+    healthy: '#10b981',
+    good_but_slow_payback: '#f59e0b',
+    borderline: '#f59e0b',
+    break_even_only: '#ef4444',
+    burning_cash: '#dc2626',
+  }[d.verdict] || '#64748b';
+  const ratioColor = d.ltv_cac_ratio >= 3 ? '#10b981' : d.ltv_cac_ratio >= 1.5 ? '#f59e0b' : '#ef4444';
+
+  return `<div class="scorecard">
+    <div class="overall" style="background:linear-gradient(135deg,${verdictColor},#0f172a);color:#fff">
+      <div>
+        <div class="lbl" style="color:rgba(255,255,255,.7)">Verdict</div>
+        <div style="font-size:2.4rem;font-weight:800;text-transform:uppercase;letter-spacing:.02em">${(d.verdict||'').replace(/_/g,' ')}</div>
+        <div class="sub" style="color:rgba(255,255,255,.85)">LTV/CAC ratio · payback period</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:1rem">
+      ${[
+        ['LTV', fmtUsd(d.ltv_usd), '#10b981'],
+        ['CAC (paid)', fmtUsd(d.effective_paid_cac_usd), '#3b82f6'],
+        ['LTV/CAC', d.ltv_cac_ratio + 'x', ratioColor],
+        ['Payback', d.payback_months + ' mo', d.payback_months <= 12 ? '#10b981' : d.payback_months <= 18 ? '#f59e0b' : '#ef4444'],
+      ].map(([l,v,c])=>`<div style="background:#fff;color:#111;border-radius:8px;padding:.85rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2)">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;letter-spacing:.05em;font-weight:700">${l}</div>
+        <div style="font-size:1.5rem;font-weight:800;color:${c};margin-top:.2rem">${v}</div>
+      </div>`).join('')}
+    </div>
+
+    ${d.diagnosis && d.diagnosis.length ? `<div style="background:#fef2f2;border-left:4px solid #ef4444;color:#7f1d1d;border-radius:6px;padding:.85rem 1rem;margin-bottom:.75rem">
+      <div style="font-size:.7rem;text-transform:uppercase;font-weight:700;margin-bottom:.4rem;color:#991b1b">Diagnosis</div>
+      ${d.diagnosis.map(x=>`<div style="font-size:.88rem;margin:.3rem 0">→ ${x}</div>`).join('')}
+    </div>`:''}
+
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #3b82f6;border-radius:6px;padding:.85rem 1rem;margin-bottom:.75rem;color:#1e293b">
+      <div style="font-size:.7rem;text-transform:uppercase;font-weight:700;margin-bottom:.4rem;color:#1e40af">Formula derivation (Wall Street Prep)</div>
+      <div style="font-family:ui-monospace,monospace;font-size:.82rem;line-height:1.6">
+        Monthly Contribution = ARPA × GM = ${fmtUsd(d.assumptions.monthly_arpu_usd)} × ${(d.assumptions.gross_margin*100).toFixed(0)}% = <strong>${fmtUsd(d.monthly_contribution_usd)}</strong><br>
+        Customer Lifetime = 1 ÷ Churn = 1 ÷ ${(d.assumptions.monthly_churn_rate*100).toFixed(2)}% = <strong>${fmt(d.lifetime_months)} months</strong><br>
+        LTV = Monthly Contribution × Lifetime = ${fmtUsd(d.monthly_contribution_usd)} × ${fmt(d.lifetime_months)} = <strong>${fmtUsd(d.ltv_usd)}</strong><br>
+        LTV/CAC = ${fmtUsd(d.ltv_usd)} ÷ ${fmtUsd(d.effective_paid_cac_usd)} = <strong style="color:${ratioColor}">${d.ltv_cac_ratio}x</strong><br>
+        Payback = CAC ÷ Monthly Contribution = ${fmtUsd(d.effective_paid_cac_usd)} ÷ ${fmtUsd(d.monthly_contribution_usd)} = <strong>${d.payback_months} months</strong>
+      </div>
+    </div>
+
+    <div style="background:#fff;color:#111;border-radius:8px;padding:1rem;margin-bottom:.75rem">
+      <div style="font-size:.75rem;color:#666;text-transform:uppercase;font-weight:700;margin-bottom:.5rem">Assumptions</div>
+      <table style="width:100%;font-size:.85rem;border-collapse:collapse">
+        <tr><td style="padding:.25rem 0;color:#666">Monthly ARPU</td><td style="text-align:right;font-weight:600">${fmtUsd(d.assumptions.monthly_arpu_usd)}</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">Monthly churn</td><td style="text-align:right;font-weight:600">${(d.assumptions.monthly_churn_rate*100).toFixed(1)}%</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">Gross margin</td><td style="text-align:right;font-weight:600">${(d.assumptions.gross_margin*100).toFixed(0)}%</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">Trial→Paid</td><td style="text-align:right;font-weight:600">${(d.assumptions.trial_to_paid_rate*100).toFixed(1)}%</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">Expansion · Referral</td><td style="text-align:right;font-weight:600">${(d.assumptions.expansion_rate*100).toFixed(1)}% · ${(d.assumptions.referral_rate*100).toFixed(1)}%</td></tr>
+        <tr><td style="padding:.25rem 0;color:#666">Net monthly retention</td><td style="text-align:right;font-weight:600">${(d.net_monthly_retention*100).toFixed(2)}%</td></tr>
+      </table>
+    </div>
+
+    <div style="font-size:.78rem;color:#888;padding:.5rem 0">
+      <strong style="color:#a78bfa">Sources:</strong>
+      ${(d.sources||[]).map(s=>{const m=s.match(/https?:\/\/[^\s]+/);return m?`<a href="${m[0]}" target="_blank" style="color:#60a5fa;text-decoration:none;display:block">${s}</a>`:`<div>${s}</div>`}).join('')}
+    </div>
+
+    <div class="toggle-raw" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Show raw JSON</div>
+    <pre style="display:none">${JSON.stringify(d,null,2)}</pre>
+  </div>`;
+}
+
+function renderABMGoal(d){
+  if(!d || d.target_deals == null) return null;
+  return `<div class="scorecard">
+    <div class="overall" style="background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff">
+      <div>
+        <div class="lbl" style="color:rgba(255,255,255,.7)">To close ${d.target_deals} deals at ${fmtUsd(d.acv_usd)} ACV</div>
+        <div style="font-size:2rem;font-weight:800">${fmtUsd(d.spend_top_performer_usd)} <span style="color:rgba(255,255,255,.6);font-size:1rem">→</span> ${fmtUsd(d.spend_median_usd)}</div>
+        <div class="sub" style="color:rgba(255,255,255,.75)">spend range · top performer → median</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem">
+      ${[
+        ['Pipeline needed', fmtUsd(d.pipeline_needed_usd), '#a78bfa'],
+        ['Leads', fmt(d.leads_estimated), '#ec4899'],
+        ['Clicks', fmt(d.clicks_needed), '#3b82f6'],
+        ['Impressions', fmt(d.impressions_needed), '#10b981'],
+      ].map(([l,v,c])=>`<div style="background:#fff;color:#111;border-radius:8px;padding:.85rem;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2)">
+        <div style="font-size:.7rem;color:#666;text-transform:uppercase;letter-spacing:.05em;font-weight:700">${l}</div>
+        <div style="font-size:1.3rem;font-weight:800;color:${c};margin-top:.2rem">${v}</div>
+      </div>`).join('')}
+    </div>
+
+    <div style="font-size:.78rem;color:#888;padding:.75rem 0">
+      <strong style="color:#a78bfa">Source:</strong> ${d.source || ''}<br>
+      ${(d.source_urls||[]).map(s=>`<a href="${s}" target="_blank" style="color:#60a5fa;text-decoration:none">${s}</a>`).join(' · ')}
+    </div>
+
+    <div class="toggle-raw" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Show raw JSON</div>
+    <pre style="display:none">${JSON.stringify(d,null,2)}</pre>
+  </div>`;
+}
+
+function renderScorecard(data){
+  if(!data || !data.dimensions) return null;
+  const overall = data.overall_score_10 ?? data.overall_0_1*10 ?? 0;
+  let html = `<div class="scorecard">
+    <div class="overall">
+      <div class="big" style="color:${scoreColor(overall)}">${overall.toFixed(1)}<span style="font-size:1.2rem;color:#666">/10</span></div>
+      <div><div class="lbl">Overall score</div><div style="font-size:.85rem;color:#aaa">${data.channel || data.url || ''}</div></div>
+    </div>`;
+
+  data.dimensions.forEach(d => {
+    const s = d.score_10;
+    const fix = d.fix || {};
+    html += `<div class="dim">
+      <div class="dim-head">
+        <div class="dim-name">${d.name}</div>
+        <div class="dim-score">
+          <span class="score-num" style="color:${scoreColor(s)}">${s}/10</span>
+          <div class="score-bar"><div class="score-bar-fill ${scoreClass(s)}" style="width:${s*10}%;background:${scoreColor(s)}"></div></div>
+        </div>
+      </div>
+      <div class="dim-grid">
+        <div><div class="lbl">What works</div>${d.what_works||'—'}</div>
+        <div><div class="lbl">Gap to 10</div>${d.gap_to_10||'—'}</div>
+      </div>
+      <div class="fix-box">
+        <div class="lbl" style="color:#888;font-size:.7rem">Fix</div>
+        ${fix.before_quote||fix.before_state ? `<div class="fix-before">${fix.before_quote || fix.before_state}</div>` : ''}
+        <div class="fix-after">→ ${fix.after_suggestion || fix.after_recommendation || '—'}</div>
+        <div style="color:#aaa;font-size:.75rem;margin-top:.3rem">${fix.why || ''}</div>
+        <div class="fix-meta">
+          ${fix.effort ? `<span>Effort: ${fix.effort}</span>`:''}
+          ${fix.expected_lift ? `<span style="color:#86efac">${fix.expected_lift}</span>`:''}
+          ${d.impact ? `<span>Impact: ${d.impact}</span>`:''}
+          ${d.source ? `<span>${d.source}</span>`:''}
+        </div>
+      </div>
+    </div>`;
+  });
+
+  if(data.priority_fixes && data.priority_fixes.length){
+    html += `<div class="priority"><h3>Top Priority Fixes</h3><ol>`;
+    data.priority_fixes.forEach(p => {
+      if(typeof p === 'string'){ html += `<li>${p}</li>`; }
+      else {
+        html += `<li><strong>${p.fix_summary}</strong>
+          ${p.expected_lift ? `<span class="lift">${p.expected_lift}</span>`:''}
+          ${p.first_step ? `<div style="color:#aaa;font-size:.78rem;margin-top:.2rem">→ ${p.first_step}</div>`:''}
+        </li>`;
+      }
+    });
+    html += `</ol></div>`;
+  }
+
+  html += `<div class="toggle-raw" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Show raw JSON</div>
+    <pre style="display:none">${JSON.stringify(data,null,2)}</pre></div>`;
+  return html;
+}
+
+async function run(t){
+  const v = id => document.getElementById(id).value;
+  const n = id => Number(v(id));
+  let url,body,out;
+  if(t==='ppc'){url='/predict/ppc';out='p_out';body={budget_usd:n('p_budget'),channel:v('p_channel'),cro_score:n('p_cro'),creative_score:n('p_creative'),acv_usd:n('p_acv'),region:v('p_region'),icp:v('p_icp')}}
+  if(t==='abm'){url='/predict/abm';out='a_out';body={budget_usd:n('a_budget'),target_accounts:n('a_accts'),cro_score:n('a_cro'),creative_score:n('a_creative'),acv_usd:n('a_acv'),ad_format:v('a_format'),region:v('a_region'),offer:v('a_offer')}}
+  if(t==='abmgoal'){url='/predict/abm/goal';out='ag_out';body={target_deals:n('ag_deals'),acv_usd:n('ag_acv'),ad_format:v('a_format'),region:v('a_region'),offer:v('a_offer')}}
+  if(t==='cro'){url='/cro';out='c_out';body={url:v('c_url')}}
+  if(t==='creative'){url='/creative';out='cr_out';body={channel:v('cr_channel'),copy:v('cr_copy'),image_desc:v('cr_img')}}
+  if(t==='lifecycle'){url='/lifecycle/score';out='lc_out';body={sequence:v('lc_seq'),subject:v('lc_subject'),goal:v('lc_goal'),landing_page:v('lc_lp'),open_rate_pct:n('lc_open'),click_rate_pct:n('lc_click'),trigger:v('lc_trigger')}}
+  if(t==='ltvcac'){
+    out='lt_out';
+    if(ltvMode==='simple'){
+      url='/lifecycle/ltv-cac-simple';
+      body={cac_usd:n('lt_cac_simple'),ltv_usd:n('lt_ltv_simple')};
+    } else {
+      url='/lifecycle/ltv-cac';
+      body={cac_usd:n('lt_cac'),monthly_arpu_usd:n('lt_arpu'),monthly_churn_rate:n('lt_churn'),gross_margin:n('lt_gm'),activation_rate:n('lt_act'),trial_to_paid_rate:n('lt_t2p'),expansion_rate:n('lt_exp'),referral_rate:n('lt_ref')};
+    }
+  }
+  const outEl = document.getElementById(out);
+  outEl.textContent='loading...';
+  const data = await post(url,body);
+  // Pretty render: scorecard (cro/creative/lifecycle), ABM, ABM goal
+  let rendered = null;
+  if(['cr_out','c_out','lc_out'].includes(out) && data && data.dimensions){
+    rendered = renderScorecard(data);
+  } else if(out === 'a_out' && data && data.mode === 'abm'){
+    rendered = renderABM(data);
+  } else if(out === 'ag_out' && data && data.target_deals != null){
+    rendered = renderABMGoal(data);
+  } else if(out === 'p_out' && data && data.mode === 'ppc'){
+    rendered = renderPPC(data);
+  } else if(out === 'lt_out' && data && data.mode === 'simple'){
+    rendered = renderLTVCACSimple(data);
+  } else if(out === 'lt_out' && data && data.ltv_cac_ratio != null){
+    rendered = renderLTVCAC(data);
+  }
+
+  if(rendered){
+    outEl.style.display='none';
+    let host = outEl.nextElementSibling;
+    if(!host || !host.classList.contains('rendered')){
+      host = document.createElement('div');
+      host.className = 'rendered';
+      outEl.parentNode.insertBefore(host, outEl.nextSibling);
+    }
+    host.innerHTML = rendered;
+  } else {
+    outEl.style.display='block';
+    if(outEl.nextElementSibling && outEl.nextElementSibling.classList.contains('rendered')) outEl.nextElementSibling.innerHTML='';
+    outEl.textContent=JSON.stringify(data,null,2);
+  }
+}
+</script></body></html>
