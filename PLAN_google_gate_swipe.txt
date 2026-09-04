@@ -1,0 +1,89 @@
+PLAN — Google sign-in gate with a swipe card deck
+=================================================
+Route A (Google Identity Services + server-side verification). Route B
+(Supabase, as GoHook does it) is the alternative and is not planned here.
+
+WHAT REPLACES WHAT
+------------------
+Today: gate-card with 4 free-text fields, POST /gate, localStorage flag.
+Nothing is verified - any email typed in gets access.
+
+After: a 2-card deck.
+  Card 1  "Sign in"      Google button. Name and email come from Google.
+  Card 2  "About you"    Role and Title, the two fields Google cannot give.
+  Done    "You're in"    Confirmation card, then the app.
+Cards spring in with a slight rotate, can be dragged left/right, and the
+next card peeks behind the current one - the OnboardingDeck pattern from the
+GoHook demo, ported to React.createElement (no build step in this repo).
+
+STYLING - GTM PREDICTOR, NOT GOHOOK
+-----------------------------------
+Only the motion is borrowed. Every colour stays the current GTM Predictor
+gate: --primary #1929D6 for the cards and buttons, the existing
+--accent/--secondary gradient behind them, white card surfaces, Rubik
+headings and Figtree body, --radius corners, and the current gate-card
+shadow. None of GoHook's dark #14171c panels or #ff4500 orange comes across.
+
+BLOCKING - NEEDS CHAITANYA
+--------------------------
+A Google Cloud OAuth client ID. I cannot create credentials in your Google
+account. Steps:
+  console.cloud.google.com > APIs & Services > Credentials
+  > Create OAuth client ID > Web application
+  Authorized JavaScript origins:
+    https://gtm-predictor-two.vercel.app
+    http://localhost:8765
+Then: vercel env add GOOGLE_CLIENT_ID production
+The client ID is public by design and ships in the page. There is no client
+secret in this flow.
+
+BACKEND
+-------
+- requirements.txt gains google-auth.
+- POST /gate stops trusting the posted email. It now takes {credential,
+  role, title}, verifies the Google ID token against GOOGLE_CLIENT_ID, and
+  reads email and name from the verified claims.
+- ALLOWED_EMAILS finally means something, because the email is now proven.
+- GAS_WEBHOOK_URL logging stays, with verified values.
+- Reject on: bad signature, wrong audience, expired token, unverified email.
+
+FRONTEND
+--------
+- Google Identity Services script (accounts.google.com/gsi/client).
+- Deck built with React + framer-motion, both already loaded for the loader.
+- Session: keep localStorage for now, storing the verified email. It is a
+  soft gate, not a security boundary - see the honest note below.
+
+WHAT THIS IS AND IS NOT
+-----------------------
+It proves the person owns a Google account and controls that email. It does
+NOT protect the API: every endpoint stays open, and the localStorage flag can
+be set by hand in devtools. Real protection means the token going to each
+API call and being checked there. Out of scope here unless you want it.
+
+FAILURE CASES / PRE-MORTEM
+--------------------------
+- GIS script blocked or slow: the deck must still render, with a plain
+  message. Never a dead card.
+- Wrong or missing GOOGLE_CLIENT_ID: /gate rejects everything and nobody can
+  get in, including you. Mitigate: if the env var is unset, fall back to the
+  current open behaviour and say so in the response.
+- Existing users have a localStorage flag from the old gate. They stay in;
+  no forced re-signin.
+- Google gives no role or title, so card 2 cannot be skipped.
+- Drag on mobile can fight page scroll. Constrain drag to the x axis.
+- Popup blockers: GIS renders inline, no popup, so this is avoided.
+- Third-party cookie restrictions can break GIS in some browsers. Fallback:
+  show a message, not a spinner that never ends.
+
+VERIFICATION
+------------
+- node --check on the inline script.
+- Deck renders, swipes both ways, and advances on sign-in.
+- POST /gate with a junk credential is rejected.
+- POST /gate with no GOOGLE_CLIENT_ID set falls back to open mode.
+- Live check after deploy, with your own Google account, once you say so.
+
+FILES TOUCHED
+-------------
+index.html, backend/server.py, requirements.txt, README.md (env table).

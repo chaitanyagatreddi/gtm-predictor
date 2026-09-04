@@ -101,7 +101,11 @@ pre{background:var(--surface);padding:1rem;border-radius:var(--radius-sm);overfl
 </head><body>
 
 <div id="gate" class="gate-overlay">
-  <div class="gate-card">
+  <!-- The deck mounts into #gate_deck. The plain card below is the fallback
+       shown when React or framer-motion did not load; its inputs are also the
+       values the deck writes into, so one submit path serves both. -->
+  <div id="gate_deck" style="width:90%;max-width:420px"></div>
+  <div class="gate-card" id="gate_plain">
     <h2>GTM Predictor</h2>
     <p>Quick intro — then you're in.</p>
     <input id="gate_name" type="text" placeholder="Full name" autocomplete="name" autofocus>
@@ -115,38 +119,57 @@ pre{background:var(--surface);padding:1rem;border-radius:var(--radius-sm);overfl
 
 <script>
 const GATE_KEY = "gtm_gate_v1";
+// Storage can throw outright when a browser blocks site data, so a failure
+// here must read as "not signed in yet", never as an error the user sees.
+function gateStored(){
+  try { return localStorage.getItem(GATE_KEY); } catch(e) { return null; }
+}
+function gateRemember(email){
+  try { localStorage.setItem(GATE_KEY, email); } catch(e) { /* session-only */ }
+}
 function gateCheck(){
-  const stored = localStorage.getItem(GATE_KEY);
-  if(stored){ document.getElementById('gate').style.display='none'; return true; }
+  if(gateStored()){ document.getElementById('gate').style.display='none'; return true; }
   return false;
 }
-async function gateSubmit(){
+function gateValues(){
   const get = id => document.getElementById(id).value.trim();
-  const email = get('gate_email').replace(/[​-‍﻿\s]/g, '').toLowerCase();
-  const name = get('gate_name');
-  const role = get('gate_role');
-  const title = get('gate_title');
-  const msg = document.getElementById('gate_msg');
-  if(!name){ msg.innerHTML = '<div class="gate-err">Name required</div>'; return; }
-  if(!email || !email.includes('@')){ msg.innerHTML = '<div class="gate-err">Valid work email required</div>'; return; }
-  if(!role){ msg.innerHTML = '<div class="gate-err">Role required</div>'; return; }
-  if(!title){ msg.innerHTML = '<div class="gate-err">Title required</div>'; return; }
-  const stopGateLoader = startLoader(msg, LOADER_MESSAGES.gate);
+  return {
+    email: get('gate_email').replace(/[\u200b-\u200d\ufeff\s]/g, '').toLowerCase(),
+    name: get('gate_name'), role: get('gate_role'), title: get('gate_title'),
+  };
+}
+function gateValidate({name,email,role,title}){
+  if(!name) return 'Name required';
+  if(!email || !email.includes('@')) return 'Valid work email required';
+  if(!role) return 'Role required';
+  if(!title) return 'Title required';
+  return null;
+}
+// Reports the outcome instead of driving the DOM, so the deck and the plain
+// fallback card can both use it.
+async function gatePost(vals){
   try{
-    const r = await fetch('/gate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,name,role,title})});
+    const r = await fetch('/gate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(vals)});
     const data = await r.json();
-    await stopGateLoader();
     if(data.ok){
-      msg.innerHTML = '';
-      localStorage.setItem(GATE_KEY, email);
-      document.getElementById('gate').style.display='none';
-    } else {
-      msg.innerHTML = '<div class="gate-err">Access denied</div>';
+      gateRemember(vals.email);
+      return {ok:true};
     }
+    return {ok:false, error:'Access denied'};
   } catch(e){
-    await stopGateLoader();
-    msg.innerHTML = '<div class="gate-err">Network error — '+e.message+'</div>';
+    return {ok:false, error:'Network error — '+e.message};
   }
+}
+async function gateSubmit(){
+  const msg = document.getElementById('gate_msg');
+  const vals = gateValues();
+  const bad = gateValidate(vals);
+  if(bad){ msg.innerHTML = '<div class="gate-err">'+bad+'</div>'; return; }
+  const stopGateLoader = startLoader(msg, LOADER_MESSAGES.gate);
+  const res = await gatePost(vals);
+  await stopGateLoader();
+  msg.innerHTML = res.ok ? '' : '<div class="gate-err">'+res.error+'</div>';
+  if(res.ok) document.getElementById('gate').style.display='none';
 }
 document.getElementById('gate_email')?.addEventListener('keydown', e => { if(e.key==='Enter') gateSubmit(); });
 window.addEventListener('DOMContentLoaded', gateCheck);
@@ -452,6 +475,142 @@ function wireNotes(){
   });
 }
 document.addEventListener('DOMContentLoaded', wireNotes);
+
+// Gate deck: two cards, swipe or button to advance, then a confirmation card.
+// Motion borrowed from the GoHook demo's OnboardingDeck; every colour is this
+// app's own. React.createElement rather than JSX - this repo has no build step.
+const GATE_STEPS = [
+  {id:1, title:'Who are you?', fields:[['gate_name','Full name','text'],['gate_email','Work email','email']]},
+  {id:2, title:'What do you do?', fields:[['gate_role','Role (Marketing, Sales, Eng...)','text'],['gate_title','Title (Head of Growth, VP Sales...)','text']]},
+];
+
+function mountGateDeck(){
+  const mount = document.getElementById('gate_deck');
+  const plain = document.getElementById('gate_plain');
+  if(!mount || !plain) return;
+  if(!(window.React && window.ReactDOM && window.Motion)) return;  // keep the plain card
+  plain.style.display = 'none';
+
+  const {createElement: h, useState} = window.React;
+  const {motion, AnimatePresence} = window.Motion;
+
+  function Deck(){
+    const [step, setStep] = useState(0);
+    const [dir, setDir] = useState(1);
+    const [vals, setVals] = useState({gate_name:'', gate_email:'', gate_role:'', gate_title:''});
+    const [err, setErr] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [done, setDone] = useState(false);
+
+    const set = (id, v) => setVals(o => ({...o, [id]: v}));
+    const stepFilled = GATE_STEPS[step].fields.every(([id]) => vals[id].trim());
+
+    const go = d => { setErr(''); setDir(d); setStep(s => Math.min(Math.max(s + d, 0), GATE_STEPS.length - 1)); };
+
+    async function submit(){
+      // The plain inputs stay the single source of truth for the submit path.
+      Object.entries(vals).forEach(([id, v]) => { document.getElementById(id).value = v; });
+      const payload = gateValues();
+      const bad = gateValidate(payload);
+      if(bad){ setErr(bad); return; }
+      setBusy(true);
+      const res = await gatePost(payload);
+      setBusy(false);
+      if(res.ok){ setDone(true); setTimeout(() => { document.getElementById('gate').style.display='none'; }, 1500); }
+      else setErr(res.error);
+    }
+
+    const next = () => {
+      if(!stepFilled){ setErr('Fill both fields to continue'); return; }
+      if(step < GATE_STEPS.length - 1) go(1); else submit();
+    };
+
+    const cardBase = {position:'absolute', inset:0, borderRadius:'var(--radius)', background:'#fff',
+      border:'1px solid var(--border)', boxShadow:'0 20px 60px rgba(25,41,214,.15)',
+      padding:'2.25rem', display:'flex', flexDirection:'column'};
+
+    if(done){
+      return h('div', {style:{position:'relative', width:'100%', maxWidth:'420px', height:'420px'}},
+        h(motion.div, {
+          initial:{opacity:0, scale:0.92, y:24}, animate:{opacity:1, scale:1, y:0},
+          transition:{type:'spring', stiffness:260, damping:22},
+          style:{...cardBase, alignItems:'center', justifyContent:'center', textAlign:'center'},
+        },
+          h('div', {style:{width:'3.5rem',height:'3.5rem',borderRadius:'50%',background:'var(--accent)',
+                           display:'flex',alignItems:'center',justifyContent:'center',marginBottom:'1.25rem',
+                           color:'var(--primary)',fontSize:'1.6rem',fontWeight:800}}, '\u2713'),
+          h('h2', {style:{fontFamily:"'Rubik',sans-serif",fontSize:'1.8rem',fontWeight:800,
+                          color:'var(--primary)',margin:'0 0 .5rem'}}, "You're in"),
+          h('p', {style:{color:'var(--text-muted)',fontSize:'.95rem',margin:0}},
+            'Spend, score, and ship \u2014 all in one place.')));
+    }
+
+    const st = GATE_STEPS[step];
+    const peek = GATE_STEPS[step + 1];
+
+    return h('div', {style:{position:'relative', width:'100%', maxWidth:'420px', height:'420px'}},
+      peek && h('div', {'aria-hidden':true, style:{position:'absolute',inset:0,borderRadius:'var(--radius)',
+        background:'var(--secondary)', transform:'scale(.96) translateY(12px)', opacity:.9}}),
+      h(AnimatePresence, {mode:'wait'},
+        h(motion.div, {
+          key: st.id,
+          initial:{opacity:0, x: dir > 0 ? 56 : -56, rotate: dir > 0 ? 4 : -4},
+          animate:{opacity:1, x:0, rotate:0},
+          exit:{opacity:0, x: dir > 0 ? 280 : -280, rotate: dir > 0 ? 18 : -18, transition:{duration:.35}},
+          transition:{type:'spring', stiffness:280, damping:24},
+          drag:'x', dragConstraints:{left:0, right:0}, dragElastic:0.85, dragMomentum:false,
+          onDragEnd:(e, info) => {
+            if(info.offset.x < -80) next();
+            else if(info.offset.x > 80 && step > 0) go(-1);
+          },
+          style:{...cardBase, cursor:'grab'},
+        },
+          h('div', {style:{display:'flex',alignItems:'center',gap:'.6rem',marginBottom:'.35rem'}},
+            h('div', {style:{width:'1.7rem',height:'1.7rem',borderRadius:'50%',background:'var(--accent)',
+                             color:'var(--primary)',display:'flex',alignItems:'center',justifyContent:'center',
+                             fontSize:'.8rem',fontWeight:800}}, String(st.id)),
+            h('h2', {style:{fontFamily:"'Rubik',sans-serif",fontSize:'1.6rem',fontWeight:800,
+                            color:'var(--primary)',margin:0,letterSpacing:'-0.02em'}}, st.title)),
+          h('p', {style:{color:'var(--text-muted)',fontSize:'.9rem',margin:'0 0 1.25rem'}},
+            step === 0 ? 'Quick intro \u2014 then you\u2019re in.' : 'Last one. Swipe or hit continue.'),
+
+          st.fields.map(([id, ph, type]) => h('input', {
+            key:id, id:'deck_'+id, type, placeholder:ph, value:vals[id],
+            autoFocus: id === st.fields[0][0],
+            onChange: e => set(id, e.target.value),
+            onKeyDown: e => { if(e.key === 'Enter') next(); },
+            onPointerDownCapture: e => e.stopPropagation(),   // typing must not drag the card
+            style:{width:'100%',padding:'.85rem 1rem',marginBottom:'.6rem',fontSize:'1rem',
+                   border:'1.5px solid var(--border)',borderRadius:'var(--radius-sm)',
+                   fontFamily:"'Figtree',sans-serif",background:'var(--bg)',color:'var(--text)'},
+          })),
+
+          err && h('div', {style:{color:'#ef4444',fontSize:'.85rem',fontWeight:600,marginTop:'.25rem'}}, err),
+
+          h('div', {style:{marginTop:'auto',display:'flex',alignItems:'center',gap:'.75rem'}},
+            step > 0 && h('button', {
+              type:'button', onClick:() => go(-1),
+              style:{padding:'.85rem 1rem',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',
+                     background:'transparent',color:'var(--text-muted)',fontFamily:"'Figtree',sans-serif",
+                     fontWeight:700,fontSize:'.95rem',cursor:'pointer'}}, '\u2190'),
+            h('button', {
+              type:'button', onClick:next, disabled:busy,
+              style:{flex:1,padding:'.85rem 1.5rem',border:'none',borderRadius:'var(--radius-sm)',
+                     background:'var(--primary)',color:'#fff',fontFamily:"'Figtree',sans-serif",
+                     fontWeight:700,fontSize:'.95rem',cursor:busy?'wait':'pointer',
+                     boxShadow:'0 4px 12px rgba(25,41,214,.2)',opacity:busy?.7:1}},
+              busy ? 'Signing you in\u2026' : (step < GATE_STEPS.length - 1 ? 'Continue \u2192' : 'Get started \u2192'))),
+
+          h('div', {style:{display:'flex',gap:'.35rem',justifyContent:'center',marginTop:'1rem'}},
+            GATE_STEPS.map((_, i) => h('span', {key:i, style:{width:i===step?'1.2rem':'.4rem',height:'.4rem',
+              borderRadius:'999px',background:i===step?'var(--primary)':'var(--border)',transition:'all .2s'}})))
+        )));
+  }
+
+  window.ReactDOM.createRoot(mount).render(h(Deck));
+}
+document.addEventListener('DOMContentLoaded', mountGateDeck);
+
 
 // Progress loader, ported from the GoHook demo's LoadingScreen but driven by
 // the real request instead of a fixed timer: the bar eases toward 90% and only
