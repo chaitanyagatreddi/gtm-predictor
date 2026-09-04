@@ -1,0 +1,108 @@
+PLAN — field tooltips + CSV validation at upload
+================================================
+
+PART A — "!" tooltip on individual field labels
+-----------------------------------------------
+Panel-level "!" icons already exist. This adds smaller ones next to specific
+field labels, for gotchas that belong to that field only.
+
+Behaviour: hover shows it (desktop) AND click/tap toggles it (touch, where
+hover does not exist). Escape or a second click closes. The bubble is
+positioned below the label, never off-screen on narrow viewports.
+
+Labels that get one, and the text:
+
+  Analytics export
+    GA4 > Reports > Engagement > Pages and screens > set the dimension to
+    "Page path and screen class" > Share > Download CSV.
+  Where is this from?
+    Only GA4 exports parse today. Mixpanel, Clarity and Plausible are not
+    wired up - the buttons are disabled, not broken.
+  Match a page URL
+    Needs a path-keyed export. A page title cannot be matched to a URL.
+  CRO score (0-1)      [PPC and ABM]
+    The CRO tab returns a score out of 10. Divide by 10 here: 6.5 becomes
+    0.65.
+  Creative score (0-1) [PPC and ABM]
+    Same scale as CRO: the Creative tab's /10 score divided by 10.
+  Assumed open rate %  [Outbound]
+    Your own assumption, not a measurement. It only feeds the reply and
+    meeting math below.
+  Monthly churn        [LTV/CAC full mode]
+    A decimal, not a percentage: 5% churn is 0.05.
+
+PART B — CSV validation at drop
+-------------------------------
+Today nothing is checked until "Read file" is clicked and the server answers.
+The file name alone is not proof of anything, so the check reads the content.
+
+On drop or file choose, scan the first ~8KB for a page-table header:
+  - contains "page path" or "landing page" or "page location"  -> PATH
+  - contains "page title"                                      -> TITLE
+  - neither                                                    -> UNKNOWN
+
+Feedback, shown immediately under the drop zone:
+  PATH     green   "Page path export - good to go."
+  TITLE    amber   "This is the page title export. Metrics will work, but
+                   URL matching will not. Re-export using Page path and
+                   screen class."
+  UNKNOWN  red     "This does not look like a GA4 Pages and screens export."
+                   plus the exact click path to produce the right one.
+Also caught: not a .csv, over 5MB (already handled), and an empty file.
+
+TITLE and UNKNOWN do not block the upload. The user may still hit Read file -
+they have been told what they will and will not get. Blocking would be wrong
+for someone who only wants the metrics.
+
+SINGLE FILE, NOT MULTIPLE
+-------------------------
+Decided against multi-file upload. Two exports mean two date ranges, possible
+duplicate paths, and conflicting metrics with no defined rule for which wins.
+That produces numbers that look authoritative and are not. A GA4 snapshot
+export already stacks several tables in one CSV and the parser handles that.
+
+FAILURE CASES / PRE-MORTEM
+--------------------------
+- A localised GA4 export has non-English headers, so the substring check
+  fails and a valid file is called UNKNOWN. Mitigate: never block, only warn.
+- A very large file read in full would freeze the tab. Only the first 8KB is
+  scanned; the FileReader already loads the whole file for upload, so the
+  check reads from the string that is already in memory.
+- Tooltips must not cover the input they describe, or the field becomes
+  unusable on a phone. Bubble sits below the label, above the input.
+- Two tooltips open at once is noise. Opening one closes the others.
+- The panel-level "!" and a field-level "!" next to each other could look
+  like a mistake. Field icons are smaller and inline with the label text.
+
+VERIFICATION
+------------
+- node --check on the inline script.
+- Hover and click each tooltip; check none overflow at 375px width.
+- Drop three fixtures: path-keyed, title-keyed, and an unrelated CSV.
+- Confirm the amber and red states still allow Read file.
+
+FILES TOUCHED
+-------------
+index.html only. No backend change.
+
+PART C — history-aware tabs and state preservation
+--------------------------------------------------
+1. Browser Back currently leaves the site, because tabs are not in history.
+   show() will pushState a hash (#compare, #analytics), popstate will select
+   the matching tab, and a hash on load will open that tab. Tabs become
+   linkable and survive a refresh.
+
+2. show() will stop clearing every panel. Results and inputs stay, so
+   returning to a tab shows what was left there, including a loaded CSV.
+   This reverses the clear-on-switch behaviour added earlier today: that was
+   only needed while there was no way to dismiss a stale result, and the
+   Clear result button now covers it.
+
+   resetAnalyticsFile stops firing on tab switch; it fires only on Clear.
+
+FAILURE CASES
+-------------
+- pushState on the first show() would add a history entry for the tab the
+  user is already on. Use replaceState on load, pushState only on a change.
+- A hash for a tab that does not exist must fall back to PPC, not blank.
+- Back from the first tab should leave the app, as the user expects.

@@ -178,14 +178,14 @@ window.addEventListener('DOMContentLoaded', gateCheck);
 <h1>GTM Predictor</h1>
 <p class="subtitle">Spend, score, and ship — all in one place</p>
 <div class="tabs">
-  <button class="active" onclick="show('ppc')">PPC</button>
-  <button onclick="show('abm')">ABM</button>
-  <button onclick="show('cro')">CRO score</button>
-  <button onclick="show('compare')">Compare</button>
-  <button onclick="show('analytics')">Analytics import</button>
-  <button onclick="show('creative')">Creative score</button>
-  <button onclick="show('lifecycle')">Outbound</button>
-  <button onclick="show('ltvcac')">LTV/CAC</button>
+  <button class="active" data-tab="ppc" onclick="show('ppc')">PPC</button>
+  <button data-tab="abm" onclick="show('abm')">ABM</button>
+  <button data-tab="cro" onclick="show('cro')">CRO score</button>
+  <button data-tab="compare" onclick="show('compare')">Compare</button>
+  <button data-tab="analytics" onclick="show('analytics')">Analytics import</button>
+  <button data-tab="creative" onclick="show('creative')">Creative score</button>
+  <button data-tab="lifecycle" onclick="show('lifecycle')">Outbound</button>
+  <button data-tab="ltvcac" onclick="show('ltvcac')">LTV/CAC</button>
 </div>
 
 <div id="ppc" class="panel active">
@@ -362,14 +362,35 @@ window.addEventListener('DOMContentLoaded', gateCheck);
 </div>
 
 <script>
-function show(t){
+const TABS = ['ppc','abm','cro','compare','analytics','creative','lifecycle','ltvcac'];
+
+// Panels keep their results and inputs across a switch, so coming back to a
+// tab shows what was left there. Clearing is explicit, via Clear result.
+function selectTab(t){
+  if(!TABS.includes(t)) t = TABS[0];
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
-  clearAllOutput();
   document.getElementById(t).classList.add('active');
-  event.target.classList.add('active');
+  const btn = document.querySelector(`.tabs button[data-tab="${t}"]`);
+  if(btn) btn.classList.add('active');
   if(t==='analytics') initAnalytics();
 }
+function show(t){
+  // Tabs live in history, so Back returns to the previous tab instead of
+  // leaving the site, and a tab can be linked to or survive a refresh.
+  if(currentTab() !== t) history.pushState({tab:t}, '', '#' + t);
+  selectTab(t);
+}
+function currentTab(){
+  const h = (location.hash || '').replace('#','');
+  return TABS.includes(h) ? h : TABS[0];
+}
+window.addEventListener('popstate', () => selectTab(currentTab()));
+window.addEventListener('DOMContentLoaded', () => {
+  const t = currentTab();
+  history.replaceState({tab:t}, '', '#' + t);
+  selectTab(t);
+});
 
 // Every panel writes its result into a <pre>, and run() may replace that with a
 // rendered card. Nothing used to clear either, so a stale result stayed on
@@ -478,6 +499,68 @@ function wireNotes(){
   });
 }
 document.addEventListener('DOMContentLoaded', wireNotes);
+
+// Field-level notes. Hover shows them on desktop; click or tap toggles them
+// where hover does not exist. Keyed by the id of the input they describe.
+const FIELD_NOTES = {
+  an_file:  'GA4 \u203a Reports \u203a Engagement \u203a Pages and screens \u203a set the dimension to "Page path and screen class" \u203a Share \u203a Download CSV.',
+  an_src:   'Only GA4 exports parse today. Mixpanel, Clarity and Plausible are not wired up yet \u2014 those buttons are disabled, not broken.',
+  an_match: 'Needs a path-keyed export. A page title cannot be matched to a URL.',
+  p_cro:    'The CRO tab scores out of 10. Divide by 10 here \u2014 6.5 becomes 0.65.',
+  p_creative:'Same scale as CRO: the Creative tab\u2019s /10 score divided by 10.',
+  a_cro:    'The CRO tab scores out of 10. Divide by 10 here \u2014 6.5 becomes 0.65.',
+  a_creative:'Same scale as CRO: the Creative tab\u2019s /10 score divided by 10.',
+  lc_open:  'Your own assumption, not a measurement. It only feeds the reply and meeting math below.',
+  lt_churn: 'A decimal, not a percentage \u2014 5% monthly churn is 0.05.',
+};
+
+function wireFieldNotes(){
+  let openBubble = null;
+  const closeOpen = () => { if(openBubble){ openBubble.style.display='none'; openBubble = null; } };
+
+  Object.entries(FIELD_NOTES).forEach(([key, text]) => {
+    // an_file and an_src label controls that are not plain inputs.
+    const anchorId = {an_file:'an_drop', an_src:'an_sources'}[key] || key;
+    const anchor = document.getElementById(anchorId);
+    if(!anchor) return;
+    const label = anchor.previousElementSibling;
+    if(!label || label.tagName !== 'LABEL') return;
+
+    const icon = document.createElement('span');
+    icon.textContent = '!';
+    icon.setAttribute('role','button');
+    icon.setAttribute('tabindex','0');
+    icon.setAttribute('aria-label','More about this field');
+    icon.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;'
+      + 'width:1.05rem;height:1.05rem;margin-left:.4rem;border-radius:50%;'
+      + 'border:1px solid var(--border);color:var(--text-muted);font-size:.68rem;'
+      + 'font-weight:700;cursor:help;vertical-align:middle;line-height:1;user-select:none';
+
+    const bubble = document.createElement('div');
+    bubble.textContent = text;
+    bubble.style.cssText = 'display:none;background:var(--accent);color:var(--text-muted);'
+      + 'border-radius:var(--radius-sm);padding:.6rem .75rem;margin:.35rem 0 .1rem;'
+      + 'font-size:.82rem;line-height:1.45;font-weight:400;max-width:100%';
+
+    const open = () => { closeOpen(); bubble.style.display='block'; openBubble = bubble; };
+    icon.addEventListener('mouseenter', open);
+    icon.addEventListener('mouseleave', () => { if(!icon.dataset.pinned) closeOpen(); });
+    icon.addEventListener('click', e => {
+      e.preventDefault(); e.stopPropagation();
+      if(icon.dataset.pinned){ delete icon.dataset.pinned; closeOpen(); }
+      else { icon.dataset.pinned = '1'; open(); }
+    });
+    icon.addEventListener('keydown', e => { if(e.key==='Enter'||e.key===' ') icon.click(); });
+
+    label.appendChild(icon);
+    // Below the label, above the field, so it never covers what it explains.
+    label.parentNode.insertBefore(bubble, label.nextSibling);
+  });
+
+  document.addEventListener('keydown', e => { if(e.key==='Escape') closeOpen(); });
+}
+document.addEventListener('DOMContentLoaded', wireFieldNotes);
+
 
 // Gate deck: two cards, swipe or button to advance, then a confirmation card.
 // Motion borrowed from the GoHook demo's OnboardingDeck; every colour is this
@@ -1082,7 +1165,7 @@ function initAnalytics(){
     fr.onload = e => {
       anContent = e.target.result;
       document.getElementById('an_droptext').textContent = `${file.name} · ${(file.size/1024).toFixed(0)} KB`;
-      document.getElementById('an_out').textContent = 'File loaded. Click "Read file".';
+      showCsvVerdict(anContent);
     };
     fr.readAsText(file);
   };
@@ -1096,6 +1179,41 @@ function initAnalytics(){
     drop.style.borderColor = 'var(--accent)';
     load(e.dataTransfer.files[0]);
   };
+}
+
+
+// The file name proves nothing, so the content is what gets checked. A wrong
+// export warns but never blocks: a title-keyed file still gives real metrics,
+// and blocking would punish someone who only wants those.
+function inspectGa4Csv(text){
+  if(!text || !text.trim()) return {level:'bad', msg:'That file is empty.'};
+  const head = text.slice(0, 8000).toLowerCase();
+  if(head.includes('page path') || head.includes('landing page') || head.includes('page location')){
+    return {level:'good', msg:'Page path export \u2014 good to go.'};
+  }
+  if(head.includes('page title')){
+    return {level:'warn', msg:'This is the page title export. Metrics will work, but URL matching will not. '
+      + 'Re-export using "Page path and screen class" to match pages to URLs.'};
+  }
+  return {level:'bad', msg:'This does not look like a GA4 Pages and screens export. '
+    + 'In GA4: Reports \u203a Engagement \u203a Pages and screens \u203a set the dimension to '
+    + '"Page path and screen class" \u203a Share \u203a Download CSV.'};
+}
+
+function showCsvVerdict(text){
+  const v = inspectGa4Csv(text);
+  const colour = {good:'#10b981', warn:'#f59e0b', bad:'#ef4444'}[v.level];
+  const mark = {good:'\u2713', warn:'!', bad:'\u2715'}[v.level];
+  const out = document.getElementById('an_out');
+  out.style.display = 'block';
+  // The host is a <pre>, so wrapping has to be turned back on explicitly and
+  // the markup kept free of the indentation pre would otherwise render.
+  const tail = v.level === 'good' ? ''
+    : '<div style="color:var(--text-muted);margin-top:.35rem">You can still click Read file.</div>';
+  out.innerHTML = '<div style="white-space:normal;border-left:3px solid ' + colour
+    + ';padding:.15rem 0 .15rem .8rem;font-family:\'Figtree\',sans-serif;font-size:.88rem;'
+    + 'line-height:1.5;color:var(--text)"><b style="color:' + colour + '">' + mark + '</b> '
+    + v.msg + tail + '</div>';
 }
 
 async function runAnalytics(){
