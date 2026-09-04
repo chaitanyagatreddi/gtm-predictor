@@ -11,6 +11,7 @@ load_dotenv()
 from predictor import predict_ppc, predict_abm
 from cro import score_url, score_content
 from compare import compare_pages
+from analytics_import import parse_export, detect_source, match_to_page
 from creative import score_creative
 from lifecycle import score_sequence, ltv_cac
 
@@ -92,6 +93,32 @@ class CRORawReq(BaseModel):
 def cro_raw(r: CRORawReq):
     try: return score_content(r.url, r.title, r.content)
     except Exception as e: raise HTTPException(500, str(e))
+
+
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5MB — serverless payload ceiling
+
+
+class AnalyticsImportReq(BaseModel):
+    content: str          # raw CSV text
+    source: str = "ga4"
+    match_url: str = ""   # optional: pull the row for one page
+
+
+@app.post("/analytics/import")
+def analytics_import(r: AnalyticsImportReq):
+    if len(r.content.encode("utf-8")) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "File too large. Filter the date range and export again (5MB max).")
+    try:
+        src = r.source or detect_source(r.content) or "ga4"
+        data = parse_export(r.content, src)
+        data["detected_source"] = detect_source(r.content)
+        if r.match_url:
+            data["matched_page"] = match_to_page(data["rows"], r.match_url)
+        return data
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 class CompareReq(BaseModel):

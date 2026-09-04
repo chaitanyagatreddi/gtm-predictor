@@ -150,6 +150,7 @@ window.addEventListener('DOMContentLoaded', gateCheck);
   <button onclick="show('abm')">ABM</button>
   <button onclick="show('cro')">CRO score</button>
   <button onclick="show('compare')">Compare</button>
+  <button onclick="show('analytics')">Analytics import</button>
   <button onclick="show('creative')">Creative score</button>
   <button onclick="show('lifecycle')">Outbound</button>
   <button onclick="show('ltvcac')">LTV/CAC</button>
@@ -227,6 +228,24 @@ window.addEventListener('DOMContentLoaded', gateCheck);
   <label>Landing page URL</label><input id="c_url" placeholder="https://yourpage.com">
   <button class="go" onclick="run('cro')">Score</button>
   <pre id="c_out"></pre>
+</div>
+
+<div id="analytics" class="panel">
+  <label>Analytics export</label>
+  <div id="an_drop" style="border:2px dashed var(--accent);border-radius:var(--radius);padding:2rem 1rem;text-align:center;cursor:pointer;transition:all .15s;background:var(--accent)">
+    <div style="font-weight:600;font-size:.95rem" id="an_droptext">Drop your CSV here, or click to choose</div>
+    <div style="font-size:.8rem;color:var(--text-muted);margin-top:.3rem">Google Analytics 4 · 5MB max</div>
+    <input type="file" id="an_file" accept=".csv,text/csv" style="display:none">
+  </div>
+
+  <label style="margin-top:1.2rem;display:block">Where is this from?</label>
+  <div id="an_sources" style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem"></div>
+
+  <label>Match a page URL <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+  <input id="an_match" placeholder="https://yoursite.com/pricing">
+
+  <button class="go" onclick="runAnalytics()">Read file</button>
+  <pre id="an_out"></pre>
 </div>
 
 <div id="compare" class="panel">
@@ -316,6 +335,7 @@ function show(t){
   document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
   document.getElementById(t).classList.add('active');
   event.target.classList.add('active');
+  if(t==='analytics') initAnalytics();
 }
 async function post(url,body){
   const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -616,6 +636,126 @@ function renderABMGoal(d){
 
     <div class="toggle-raw" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">Show raw JSON</div>
     <pre style="display:none">${JSON.stringify(d,null,2)}</pre>
+  </div>`;
+}
+
+// ---- Analytics import ----
+const AN_SOURCES = [
+  {id:'ga4',       label:'Google Analytics 4', ready:true},
+  {id:'mixpanel',  label:'Mixpanel',           ready:false},
+  {id:'clarity',   label:'Microsoft Clarity',  ready:false},
+  {id:'plausible', label:'Plausible',          ready:false},
+];
+let anSource = 'ga4', anContent = '', anFilename = '';
+
+function renderSources(){
+  const box = document.getElementById('an_sources');
+  if(!box) return;
+  box.innerHTML = AN_SOURCES.map(s=>{
+    const on = s.id===anSource, dim = !s.ready;
+    return `<button onclick="${s.ready?`pickSource('${s.id}')`:''}"
+      ${dim?'disabled':''}
+      style="display:flex;align-items:center;gap:.45rem;padding:.5rem .85rem;border-radius:999px;
+             border:1px solid ${on?'var(--primary)':'var(--accent)'};
+             background:${on?'var(--primary)':'transparent'};
+             color:${on?'#fff':dim?'var(--text-muted)':'var(--text)'};
+             font-family:'Figtree',sans-serif;font-size:.85rem;font-weight:600;
+             cursor:${dim?'not-allowed':'pointer'};opacity:${dim?.5:1}">
+      <span style="width:.55rem;height:.55rem;border-radius:50%;background:${on?'#fff':'var(--accent)'}"></span>
+      ${s.label}${dim?' · soon':''}</button>`;
+  }).join('');
+}
+function pickSource(id){ anSource = id; renderSources(); }
+
+function initAnalytics(){
+  const drop = document.getElementById('an_drop');
+  const input = document.getElementById('an_file');
+  if(!drop || !input || drop.dataset.wired) return;
+  drop.dataset.wired = '1';
+  renderSources();
+
+  const load = file => {
+    if(!file) return;
+    if(file.size > 5*1024*1024){
+      document.getElementById('an_out').textContent = 'File is larger than 5MB. Filter the date range in GA4 and export again.';
+      return;
+    }
+    anFilename = file.name;
+    const fr = new FileReader();
+    fr.onload = e => {
+      anContent = e.target.result;
+      document.getElementById('an_droptext').textContent = `${file.name} · ${(file.size/1024).toFixed(0)} KB`;
+      document.getElementById('an_out').textContent = 'File loaded. Click "Read file".';
+    };
+    fr.readAsText(file);
+  };
+
+  drop.onclick = () => input.click();
+  input.onchange = e => load(e.target.files[0]);
+  drop.ondragover = e => { e.preventDefault(); drop.style.borderColor = 'var(--primary)'; };
+  drop.ondragleave = () => { drop.style.borderColor = 'var(--accent)'; };
+  drop.ondrop = e => {
+    e.preventDefault();
+    drop.style.borderColor = 'var(--accent)';
+    load(e.dataTransfer.files[0]);
+  };
+}
+
+async function runAnalytics(){
+  const out = document.getElementById('an_out');
+  if(!anContent){ out.textContent = 'Choose a CSV file first.'; return; }
+  out.textContent = 'reading...';
+  const data = await post('/analytics/import', {
+    content: anContent,
+    source: anSource,
+    match_url: document.getElementById('an_match').value.trim(),
+  });
+  const r = renderAnalytics(data);
+  if(r){ out.innerHTML = r; } else { out.textContent = JSON.stringify(data, null, 2); }
+}
+
+function renderAnalytics(d){
+  const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  if(d.detail) return `<div class="card"><h3 style="margin-top:0">Could not read that file</h3>
+    <p style="font-size:.9rem;color:var(--text-muted)">${esc(d.detail)}</p></div>`;
+  if(!d.rows) return null;
+
+  const num = v => v==null ? '—' : fmt(v);
+  const time = v => v==null ? '—' : `${Math.floor(v/60)}m ${Math.round(v%60)}s`;
+  const cols = d.columns_found || [];
+
+  const head = ['Page', ...cols.map(c=>c.replace('_',' '))]
+    .map((c,i)=>`<th style="text-align:${i?'right':'left'};padding-bottom:.4rem;font-size:.75rem;
+      color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">${esc(c)}</th>`).join('');
+
+  const body = d.rows.slice(0,25).map(r=>`<tr style="border-top:1px solid var(--accent)">
+      <td style="padding:.4rem 0;font-family:ui-monospace,monospace;font-size:.82rem">${esc(r.path)}</td>
+      ${cols.map(c=>`<td style="text-align:right;font-variant-numeric:tabular-nums">
+        ${c==='avg_time'?time(r[c]):num(r[c])}</td>`).join('')}
+    </tr>`).join('');
+
+  const matched = d.matched_page ? `
+    <div style="background:var(--accent);border-radius:var(--radius);padding:.9rem;margin-bottom:1.2rem">
+      <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Matched page</div>
+      <div style="font-family:ui-monospace,monospace;font-weight:600;margin:.25rem 0">${esc(d.matched_page.path)}</div>
+      <div style="font-size:.86rem">${cols.map(c=>
+        `${c.replace('_',' ')}: <b>${c==='avg_time'?time(d.matched_page[c]):num(d.matched_page[c])}</b>`
+      ).join(' · ')}</div>
+    </div>` : (document.getElementById('an_match').value.trim()
+      ? `<div style="color:#f59e0b;font-size:.86rem;margin-bottom:1rem">No row matched that URL.</div>` : '');
+
+  const warns = (d.warnings||[]).map(w=>
+    `<li style="margin:.2rem 0">${esc(w)}</li>`).join('');
+
+  return `<div class="card">
+    <h3 style="margin-top:0">${esc(d.row_count)} pages read from ${esc((d.source||'').toUpperCase())}</h3>
+    ${matched}
+    <div style="overflow-x:auto"><table style="width:100%;font-size:.85rem;border-collapse:collapse">
+      <tr>${head}</tr>${body}
+    </table></div>
+    ${d.rows.length>25?`<div style="font-size:.8rem;color:var(--text-muted);margin-top:.6rem">Showing first 25 of ${d.rows.length} rows.</div>`:''}
+    ${warns?`<div style="margin-top:1rem"><div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.3rem">Notes</div>
+      <ul style="margin:0;padding-left:1.1rem;font-size:.82rem;color:var(--text-muted)">${warns}</ul></div>`:''}
   </div>`;
 }
 

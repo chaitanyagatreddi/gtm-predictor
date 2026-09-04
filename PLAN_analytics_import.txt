@@ -1,0 +1,149 @@
+PLAN — Analytics CSV Import for GTM Predictor
+Written: 2026-09-04. Status: AWAITING APPROVAL. Do not build until approved.
+
+===========================================================
+WHAT IT DOES
+===========================================================
+User uploads an analytics export. Picks the source via radio buttons.
+Tool parses it, normalises to a common shape, and overlays real traffic
+data on the page analysis it already produces.
+
+Turns "here is what your page looks like" into
+"here is what your page looks like AND what it is actually doing".
+
+SCOPE DECISION (2026-09-04): GA4 ONLY for v1.
+  - Plausible: SKIPPED. Small user base, and skipping it removes all the
+    ZIP-handling complexity.
+  - Mixpanel: BLOCKED until a real sample export exists. Will not guess.
+  - Clarity: BLOCKED for the same reason. Different field shape anyway.
+  GA4 has dominant market share, so v1 covers most users with one parser.
+  Radio buttons still built, other sources shown as "coming soon".
+
+Sources originally considered: Google Analytics 4, Plausible, Mixpanel,
+Microsoft Clarity.
+
+===========================================================
+RESEARCH FINDINGS (verified, not assumed)
+===========================================================
+GA4
+  - Export path: report -> Share this report -> Download CSV
+  - Up to 100,000 rows
+  - CSV has METADATA PREAMBLE ROWS before the real header (# comment lines,
+    date range, report name). Naive csv.reader will read garbage.
+  - Column names vary BY REPORT:
+      Pages and screens: "Page path and screen class", "Views", "Users",
+                         "Views per user", "Average engagement time"
+      Landing page:      different columns again
+  - Implication: cannot hardcode one GA4 schema. Must detect columns.
+
+PLAUSIBLE
+  - Export is a ZIP OF MULTIPLE CSVs, not a single CSV. This is the biggest
+    surprise in the research.
+  - Quick export capped at 300 entries per report, 100 for page reports.
+  - Full export is queued and emailed, 24h download window.
+  - Files inside include conversions.csv, custom_props.csv, plus per-report
+    files (pages, sources, etc.)
+  - Implication: must accept .zip and pick the right file(s) from inside it.
+
+MICROSOFT CLARITY
+  - Three routes: dashboard CSV, REST API, MCP server.
+  - Data is session/behaviour oriented (rage clicks, dead clicks, scroll
+    depth) rather than page-metric oriented.
+  - Implication: maps to DIFFERENT fields than GA4/Plausible. Do not force
+    it into the same shape.
+
+MIXPANEL
+  - Event-based. Export shape varies by report type (Insights vs Funnels
+    vs Events). Not yet verified against a real export.
+  - FLAG: needs a real sample file before building the parser. Do not guess.
+
+===========================================================
+BUILD STEPS
+===========================================================
+1. backend/analytics_import.py (new)
+   - accept_upload(file_bytes, filename, source) -> normalised dict
+   - Handle .csv and .zip (Plausible)
+   - GA4: skip preamble by scanning for the first row that looks like a
+     header (contains a known metric word), then parse from there
+   - Normalise to a common internal shape:
+       {"rows": [{"path": str, "views": int|None, "users": int|None,
+                  "bounce_rate": float|None, "avg_time": float|None}],
+        "source": str, "row_count": int, "warnings": [str]}
+   - Never crash on unknown columns — map what you find, warn about the rest
+
+2. Source detection
+   - Auto-detect from file shape (GA4 preamble marker, Plausible zip
+     structure, Clarity headers)
+   - Radio buttons act as OVERRIDE/CONFIRMATION, not the only input
+   - Chaitanya's design: radio buttons AFTER upload. Auto-detect pre-selects
+     the likely one, user can correct it.
+
+3. backend/server.py
+   class AnalyticsImportReq — multipart upload, not JSON (file payload)
+   @app.post("/analytics/import")
+   Return the normalised shape + warnings so the UI can show what was read.
+
+4. Overlay on existing analysis
+   - Match uploaded rows to scored pages by path
+   - Show: this page scores 5.5/10 AND gets 12k views/mo AND 68% bounce
+   - The overlay is the actual product. Parsing is plumbing.
+
+5. index.html — upload UI
+   - Drag-drop zone, radio buttons for source, parse preview before commit
+   - Use ui-ux-pro-max library for the upload/radio components per
+     Chaitanya's note
+
+===========================================================
+FAILURE CASES / PRE-MORTEM
+===========================================================
+1. GA4 PREAMBLE BREAKS THE PARSER — most likely failure. Naive parsing
+   reads "# ----------------------------------------" as the header.
+   -> Scan rows for the first that contains a recognised metric name.
+      Test against a real GA4 export before shipping.
+
+2. PLAUSIBLE ZIP NOT HANDLED — user uploads .zip, tool expects .csv, fails.
+   -> Detect zip by magic bytes, not extension. Extract, list contents,
+      pick page-level file. If ambiguous, ask the user which file.
+
+3. MIXPANEL SCHEMA UNVERIFIED — I have not seen a real Mixpanel export.
+   Building a parser from assumption WILL produce a wrong mapping.
+   -> DO NOT SHIP MIXPANEL until a real sample file is available.
+      Ship GA4 + Plausible first. Mixpanel as "coming soon" in the UI.
+
+4. PATH MATCHING FAILS — analytics paths ("/pricing") vs scored URLs
+   ("https://site.com/pricing/") will not match on a naive string compare.
+   Trailing slashes, query strings, and domain prefixes all differ.
+   -> Normalise both sides: strip domain, strip trailing slash, drop query
+      strings. Report unmatched rows rather than silently dropping them.
+
+5. FILE SIZE — GA4 allows 100k rows. Vercel serverless has payload and
+   memory limits.
+   -> Cap upload at ~5MB. If bigger, tell the user to filter the date range
+      before exporting. Do not attempt to stream-process on serverless.
+
+6. PII IN UPLOADS — Clarity and Mixpanel exports can contain user IDs,
+   emails, session recordings metadata.
+   -> Do not persist uploads. Parse in memory, return the result, discard.
+      State this in the UI. If storage is ever added, this needs a privacy
+      policy first.
+
+7. SCOPE CREEP — do NOT build in this pass: historical trending, scheduled
+   imports, direct API/OAuth connections, funnel visualisation. Those are
+   the journey-mapper idea, tracked separately in IDEA_buyer_journey_mapper.txt.
+
+===========================================================
+ESTIMATE
+===========================================================
+GA4 + Plausible only:      ~2 hours (parser + endpoint + UI + testing)
+Adding Clarity:            +45 min (different field mapping)
+Adding Mixpanel:           blocked until a real sample export exists
+
+===========================================================
+OPEN QUESTIONS FOR CHAITANYA
+===========================================================
+- Ship GA4 + Plausible first, or wait and do all four?
+- Do you have a real Mixpanel and Clarity export to test against? Without
+  them the parsers are guesses, and guessing is what produced the
+  fabricated-testimonial bug earlier.
+- TIME CHECK: assignment still needs Q4, Q5, Q6 + deck (~3-4 hrs), due in
+  a couple of days. This is ~2 hrs minimum. Worth confirming the order.

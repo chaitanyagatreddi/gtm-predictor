@@ -1,0 +1,54 @@
+IDEA (PARKED) — Buyer Journey Mapper for GTM Predictor
+Parked: 2026-09-04. Not building yet.
+
+===========================================================
+CONCEPT
+===========================================================
+User enters a URL. Tool maps the buyer journey as an interactive mind map
+(7 stages) plus a weighted decision table showing where to focus and why.
+
+Reference stages seen in the mockup:
+  1 Awareness   — problem becomes visible (incident pain, bill shock/sprawl)
+  2 Discover    — build a shortlist (search/education, open-source proof)
+  3 Evaluate    — validate the choice (product depth, economic/social proof)
+  4 Activate    — reach first value (trial, first telemetry)
+  5 Decide      — commercial & governance (pricing tiers, enterprise/BYOC)
+  6 Adopt       — make it the default (unified debugging, tool consolidation)
+  7 Expand      — grow platform value (more use cases, advocacy loop)
+
+Second output: weighted decision table (High/Medium/Low) — decision + logic.
+
+===========================================================
+THE KEY DESIGN DECISION (settled)
+===========================================================
+Crawling alone CANNOT produce a real buyer journey. It can only show the
+journey the SITE IS BUILT TO SUPPORT. Conversion rates, drop-off, and
+time-in-stage are invisible from outside — asserting them would be fabrication.
+
+SOLUTION: two inputs, two roles.
+  1. CRAWL  -> structure. What stages the site supports, and where the holes are.
+              Derived from: sitemap/nav, docs vs pricing vs comparison pages,
+              trial/demo CTAs, pricing tiers, case studies, community links.
+  2. USER DATA -> reality. Whether it actually works.
+              GA4 / Mixpanel CSV export preferred (parseable, no OCR risk).
+              Screenshots as fallback if they cannot export.
+
+OVERLAY THE TWO = the actually useful output, e.g.
+  "Your Evaluate content gets 40% of traffic but only 3% move to signup —
+   the gap is between comparison pages and activation."
+
+Same discipline as the CRO scorer: only assert what is actually in the data.
+Same method as the Sprinto audit: reconstruct externally where possible,
+then let real data sharpen it where available.
+
+===========================================================
+OPEN QUESTIONS FOR LATER
+===========================================================
+- Mind map rendering: the mockup has text overlap (labels colliding with
+  nodes and each other). Needs a layout that reserves label space, or a
+  library. Do NOT hand-author long SVG paths.
+- How much should the tool infer vs ask the user? Stage classification of
+  pages is inference — is a confidence indicator needed per page?
+- CSV schema: which columns are required vs optional? Fail gracefully when
+  the export shape differs between GA4 and Mixpanel.
+- Does this become its own tab, or an extension of Compare?
