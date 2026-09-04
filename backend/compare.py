@@ -54,7 +54,7 @@ async def _scrape_one(url: str) -> dict:
             "scraper": page.get("scraper", "firecrawl"),
         }
     except Exception as e:
-        return {"url": url, "ok": False, "error": str(e)}
+        return {"url": url, "ok": False, "error": f"{type(e).__name__}: {e}"}
 
 
 async def compare_pages(my_url: str, competitor_url: str) -> dict:
@@ -75,8 +75,10 @@ async def compare_pages(my_url: str, competitor_url: str) -> dict:
         }
 
     # Score both against the existing rubric
-    my_score = score_content(my_url, mine["title"], mine["content"])
-    their_score = score_content(competitor_url, theirs["title"], theirs["content"])
+    my_score, their_score = await asyncio.gather(
+        asyncio.to_thread(score_content, my_url, mine["title"], mine["content"]),
+        asyncio.to_thread(score_content, competitor_url, theirs["title"], theirs["content"]),
+    )
 
     # Diff pass — smaller excerpts to stay inside context
     payload = {

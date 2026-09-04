@@ -49,6 +49,10 @@ def _html_to_text(raw_html: str) -> tuple[str, str]:
 
 async def scrape_url(url: str) -> dict:
     """Try Firecrawl (if key set) → fall back to built-in scraper."""
+    url = url.strip()
+    if not re.match(r"^https?://", url, re.I):
+        url = "https://" + url
+
     firecrawl_key = os.getenv("FIRECRAWL_API_KEY") or ""
     if firecrawl_key.strip():
         try:
