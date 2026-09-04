@@ -375,9 +375,12 @@ function show(t){
 // rendered card. Nothing used to clear either, so a stale result stayed on
 // screen until the page was refreshed.
 function clearOutput(pre){
+  const panel = pre.closest('.panel');
+  // A rendered result can contain its own <pre>. Clearing the host detaches
+  // those, so a stale entry in the NodeList must be skipped, not crashed on.
+  if(!panel) return;
   pre.innerHTML = '';
   pre.style.display = 'block';
-  const panel = pre.closest('.panel');
   panel.querySelectorAll('.rendered').forEach(r => r.innerHTML = '');
   const btn = panel.querySelector('.clear-btn');
   if(btn) btn.style.display = 'none';
