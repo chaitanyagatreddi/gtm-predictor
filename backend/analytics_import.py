@@ -103,7 +103,10 @@ def normalise_path(raw: str) -> str:
     if not raw:
         return ""
     p = str(raw).strip()
-    p = re.sub(r"^https?://[^/]+", "", p)   # drop protocol + domain
+    p = re.sub(r"^https?://", "", p, flags=re.I)   # drop protocol if present
+    # Drop a leading host, whether or not a protocol was typed. Without this,
+    # "www.example.com/pricing" normalises to "/www.example.com/pricing".
+    p = re.sub(r"^[a-z0-9-]+(\.[a-z0-9-]+)+(?::\d+)?(?=/|$)", "", p, flags=re.I)
     p = p.split("?")[0].split("#")[0]       # drop query + fragment
     if not p.startswith("/"):
         p = "/" + p
