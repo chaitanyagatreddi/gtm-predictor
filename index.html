@@ -724,25 +724,33 @@ function renderAnalytics(d){
   const time = v => v==null ? '—' : `${Math.floor(v/60)}m ${Math.round(v%60)}s`;
   const cols = d.columns_found || [];
 
-  const head = ['Page', ...cols.map(c=>c.replace('_',' '))]
+  const isTitle = d.page_kind === 'title';
+  const pageLabel = isTitle ? 'Page title' : 'Page path';
+
+  const head = [pageLabel, ...cols.map(c=>c.replace('_',' '))]
     .map((c,i)=>`<th style="text-align:${i?'right':'left'};padding-bottom:.4rem;font-size:.75rem;
       color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">${esc(c)}</th>`).join('');
 
   const body = d.rows.slice(0,25).map(r=>`<tr style="border-top:1px solid var(--accent)">
-      <td style="padding:.4rem 0;font-family:ui-monospace,monospace;font-size:.82rem">${esc(r.path)}</td>
+      <td style="padding:.4rem 0;${isTitle?'':'font-family:ui-monospace,monospace;'}font-size:.82rem">${esc(r.page)}</td>
       ${cols.map(c=>`<td style="text-align:right;font-variant-numeric:tabular-nums">
         ${c==='avg_time'?time(r[c]):num(r[c])}</td>`).join('')}
     </tr>`).join('');
 
+  const askedToMatch = document.getElementById('an_match').value.trim();
   const matched = d.matched_page ? `
     <div style="background:var(--accent);border-radius:var(--radius);padding:.9rem;margin-bottom:1.2rem">
       <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Matched page</div>
-      <div style="font-family:ui-monospace,monospace;font-weight:600;margin:.25rem 0">${esc(d.matched_page.path)}</div>
+      <div style="font-family:ui-monospace,monospace;font-weight:600;margin:.25rem 0">${esc(d.matched_page.path||d.matched_page.page)}</div>
       <div style="font-size:.86rem">${cols.map(c=>
         `${c.replace('_',' ')}: <b>${c==='avg_time'?time(d.matched_page[c]):num(d.matched_page[c])}</b>`
       ).join(' · ')}</div>
-    </div>` : (document.getElementById('an_match').value.trim()
-      ? `<div style="color:#f59e0b;font-size:.86rem;margin-bottom:1rem">No row matched that URL.</div>` : '');
+    </div>`
+    : askedToMatch ? `<div style="border-left:3px solid #f59e0b;padding:.5rem 0 .5rem .8rem;margin-bottom:1.2rem;font-size:.86rem">
+        ${isTitle
+          ? 'This export is keyed on page <b>title</b>, so URLs can\\'t be matched. Re-export using <b>Page path and screen class</b> in GA4.'
+          : 'No row matched that URL.'}
+      </div>` : '';
 
   const warns = (d.warnings||[]).map(w=>
     `<li style="margin:.2rem 0">${esc(w)}</li>`).join('');

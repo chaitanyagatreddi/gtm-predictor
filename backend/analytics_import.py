@@ -41,18 +41,20 @@ def _to_number(raw):
         return None
 
 
-def _find_header_row(rows) -> int:
+def _find_header_row(rows, start=0) -> int:
     """
-    Return the index of the real header row, skipping GA4's preamble.
-    A header row is one that contains a recognised path column AND at least
-    one recognised metric column.
+    Return the index of a page-table header row, skipping GA4 preamble.
+
+    A GA4 "snapshot" export stacks MANY tables in one file (active users,
+    channels, countries, retention, pages, events), each with its own
+    preamble and header. So scan the WHOLE file, not just the top.
     """
-    for i, row in enumerate(rows[:40]):  # header is never deep in the file
-        cells = [_clean(c) for c in row]
+    for i in range(start, len(rows)):
+        cells = [_clean(c) for c in rows[i]]
         joined = " | ".join(cells)
-        has_path = any(h in joined for h in GA4_PATH_HINTS)
+        has_page = any(h in joined for h in GA4_PATH_HINTS)
         has_metric = any(h in joined for h in GA4_METRIC_HINTS)
-        if has_path and has_metric:
+        if has_page and has_metric:
             return i
     return -1
 
@@ -60,7 +62,12 @@ def _find_header_row(rows) -> int:
 def _map_columns(header) -> dict:
     """
     GA4 column names vary by report type, so match on substrings rather than
-    exact names. Returns {field: column_index}.
+    exact names. Returns {field: column_index} plus "_page_kind".
+
+    IMPORTANT: GA4 can key a report on page PATH or page TITLE. A title is
+    not a URL and must never be treated as one — prefixing "/" to
+    "Something — Build AI Apps In Minutes" produces a path that silently
+    matches nothing.
     """
     idx = {}
     for i, raw in enumerate(header):
@@ -68,10 +75,12 @@ def _map_columns(header) -> dict:
         if not c:
             continue
         if "path" in c or "landing page" in c or "page location" in c:
-            idx.setdefault("path", i)
-        elif "page title" in c and "path" not in idx:
-            idx.setdefault("path", i)
-        elif "view" in c and "per user" not in c:
+            idx.setdefault("page", i)
+            idx["_page_kind"] = "path"
+        elif "page title" in c and "page" not in idx:
+            idx.setdefault("page", i)
+            idx["_page_kind"] = "title"
+        elif "view" in c and "per user" not in c and "per active user" not in c:
             idx.setdefault("views", i)
         elif "active users" in c or c == "users" or "total users" in c:
             idx.setdefault("users", i)
@@ -121,32 +130,46 @@ def parse_ga4(content: str) -> dict:
 
     header = rows[h]
     idx = _map_columns(header)
-    if "path" not in idx:
-        raise ValueError("No page path column found in the export.")
+    if "page" not in idx:
+        raise ValueError("No page column found in the export.")
 
-    unmapped = [c for i, c in enumerate(header) if i not in idx.values() and _clean(c)]
+    kind = idx.pop("_page_kind", "path")
+    page_col = idx["page"]
+    metric_cols = {k: v for k, v in idx.items() if k != "page"}
+
+    unmapped = [c for i, c in enumerate(header)
+                if i not in idx.values() and _clean(c)]
     if unmapped:
         warnings.append("Columns read but not used: " + ", ".join(unmapped[:8]))
 
+    if kind == "title":
+        warnings.append(
+            "This export is keyed on page TITLE, not page path. "
+            "Titles can't be matched to URLs — re-export using "
+            "'Page path and screen class' if you need page matching."
+        )
+
     out, skipped = [], 0
     for row in rows[h + 1:]:
-        if not row or len(row) <= idx["path"]:
+        # A blank row ends this table. GA4 snapshot exports stack many
+        # tables in one file, so stop here rather than parsing the next
+        # table's rows as if they were pages.
+        if not row or not any((c or "").strip() for c in row):
+            break
+        if len(row) <= page_col:
+            skipped += 1
             continue
-        raw_path = (row[idx["path"]] or "").strip()
-        # GA4 appends a totals/grand-total row and sometimes blank separators
-        if not raw_path or raw_path.lower().lstrip("# ") in {
-            "totals", "total", "grand total", "(not set)"
+        raw = (row[page_col] or "").strip()
+        if not raw or raw.lower().lstrip("# ") in {
+            "totals", "total", "grand total", "(not set)", "(other)"
         }:
             skipped += 1
             continue
-        path = normalise_path(raw_path)
-        if not path:
-            skipped += 1
-            continue
-        rec = {"path": path}
-        for field, i in idx.items():
-            if field == "path":
-                continue
+
+        rec = {"page": raw, "page_kind": kind}
+        # Only produce a path when the source column really is a path.
+        rec["path"] = normalise_path(raw) if kind == "path" else None
+        for field, i in metric_cols.items():
             rec[field] = _to_number(row[i]) if i < len(row) else None
         out.append(rec)
 
@@ -157,8 +180,9 @@ def parse_ga4(content: str) -> dict:
 
     return {
         "source": "ga4",
+        "page_kind": kind,
         "row_count": len(out),
-        "columns_found": sorted(k for k in idx if k != "path"),
+        "columns_found": sorted(metric_cols),
         "warnings": warnings,
         "rows": out,
     }
@@ -193,9 +217,15 @@ def detect_source(content: str, filename: str = ""):
 
 
 def match_to_page(rows, page_url: str):
-    """Find the analytics row matching a scored page URL."""
+    """
+    Find the analytics row matching a scored page URL.
+    Only works on path-keyed exports — titles are not URLs, and pretending
+    otherwise returns confidently wrong matches.
+    """
     target = normalise_path(page_url)
+    if not target:
+        return None
     for r in rows:
-        if r.get("path") == target:
+        if r.get("path") and r["path"] == target:
             return r
     return None
