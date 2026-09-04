@@ -406,6 +406,7 @@ function clearOutput(pre){
   const btn = panel.querySelector('.clear-btn');
   if(btn) btn.style.display = 'none';
   if(pre.id === 'an_out') resetAnalyticsFile();
+  if(pre.id === 'c_out') lastCroResult = null;
 }
 function clearAllOutput(){
   document.querySelectorAll('.panel pre').forEach(clearOutput);
@@ -560,6 +561,107 @@ function wireFieldNotes(){
   document.addEventListener('keydown', e => { if(e.key==='Escape') closeOpen(); });
 }
 document.addEventListener('DOMContentLoaded', wireFieldNotes);
+
+// CRO export. Built client-side from the result already on screen, so it costs
+// no extra API call and needs no dependency.
+let lastCroResult = null;
+
+function downloadFile(name, text, mime){
+  const blob = new Blob([text], {type: mime + ';charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function croFilename(ext){
+  const host = (lastCroResult && lastCroResult.url || 'page')
+    .replace(/^https?:\/\//,'').replace(/[^a-z0-9.-]+/gi,'-').replace(/-+$/,'');
+  return `cro-${host}-${new Date().toISOString().slice(0,10)}.${ext}`;
+}
+
+function croMarkdown(d){
+  const L = [];
+  L.push(`# CRO score \u2014 ${d.url || ''}`.trim());
+  L.push('');
+  L.push(`**Overall: ${d.overall_score_10}/10**`);
+  L.push('');
+  L.push('| Dimension | Score | What works | Gap to 10 |');
+  L.push('|---|---|---|---|');
+  const cell = v => String(v == null ? '' : v).replace(/\|/g,'\\|').replace(/\n+/g,' ');
+  (d.dimensions||[]).forEach(x =>
+    L.push(`| ${cell(x.name)} | ${cell(x.score_10)}/10 | ${cell(x.what_works)} | ${cell(x.gap_to_10)} |`));
+  L.push('');
+  L.push('## Fixes');
+  (d.dimensions||[]).forEach(x => {
+    const f = x.fix || {};
+    L.push('');
+    L.push(`### ${x.name} \u2014 ${x.score_10}/10`);
+    if(f.before_quote)     L.push(`- **Before:** ${f.before_quote}`);
+    if(f.after_suggestion) L.push(`- **After:** ${f.after_suggestion}`);
+    if(f.why)              L.push(`- **Why:** ${f.why}`);
+    if(f.effort)           L.push(`- **Effort:** ${f.effort}`);
+    if(f.expected_lift)    L.push(`- **Expected lift:** ${f.expected_lift}`);
+    if(x.source)           L.push(`- **Source:** ${x.source}`);
+  });
+  if((d.priority_fixes||[]).length){
+    L.push('');
+    L.push('## Priority order');
+    d.priority_fixes.forEach(f =>
+      L.push(`${f.rank}. ${f.fix_summary}${f.expected_lift ? ` (${f.expected_lift})` : ''}`
+             + `${f.first_step ? ` \u2014 first step: ${f.first_step}` : ''}`));
+  }
+  if(d.scraper_used) { L.push(''); L.push(`_Scraped with ${d.scraper_used}._`); }
+  return L.join('\n');
+}
+
+function croCsv(d){
+  const cols = ['dimension','score_10','what_works','gap_to_10','before_quote',
+                'after_suggestion','why','effort','expected_lift','impact','source'];
+  // Quote every field: the copy routinely contains commas, quotes and newlines.
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g,'""') + '"';
+  const rows = [cols.join(',')];
+  (d.dimensions||[]).forEach(x => {
+    const f = x.fix || {};
+    rows.push([x.name, x.score_10, x.what_works, x.gap_to_10, f.before_quote,
+               f.after_suggestion, f.why, f.effort, f.expected_lift, x.impact, x.source].map(q).join(','));
+  });
+  return rows.join('\r\n');
+}
+
+function exportCro(kind){
+  if(!lastCroResult) return;
+  if(kind === 'md') downloadFile(croFilename('md'), croMarkdown(lastCroResult), 'text/markdown');
+  else downloadFile(croFilename('csv'), croCsv(lastCroResult), 'text/csv');
+}
+
+// The buttons live beside Clear result and follow the same show/hide rule.
+function wireCroExport(){
+  const panel = document.getElementById('cro');
+  const clear = panel && panel.querySelector('.clear-btn');
+  if(!clear) return;
+  const style = 'display:none;margin-top:1rem;margin-right:.5rem;padding:.45rem .9rem;'
+    + 'border:1px solid var(--primary);border-radius:999px;background:transparent;'
+    + "color:var(--primary);font-family:'Figtree',sans-serif;font-size:.82rem;"
+    + 'font-weight:600;cursor:pointer';
+  [['Download .md','md'],['Download .csv','csv']].forEach(([label, kind]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.className = 'cro-export';
+    b.style.cssText = style;
+    b.onclick = () => exportCro(kind);
+    clear.parentNode.insertBefore(b, clear);
+  });
+  new MutationObserver(() => {
+    const on = !!lastCroResult && clear.style.display !== 'none';
+    panel.querySelectorAll('.cro-export').forEach(b => b.style.display = on ? 'inline-block' : 'none');
+  }).observe(panel, {childList:true, characterData:true, subtree:true, attributes:true});
+}
+document.addEventListener('DOMContentLoaded', () => setTimeout(wireCroExport, 0));
+
 
 
 // Gate deck: two cards, swipe or button to advance, then a confirmation card.
@@ -1502,6 +1604,8 @@ async function run(t){
   } else if(out === 'lt_out' && data && data.ltv_cac_ratio != null){
     rendered = renderLTVCAC(data);
   }
+
+  if(out === 'c_out' && data && data.dimensions) lastCroResult = data;
 
   if(rendered){
     outEl.style.display='none';
