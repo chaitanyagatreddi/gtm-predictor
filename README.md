@@ -12,6 +12,8 @@ Live: https://gtm-predictor-two.vercel.app
 | **ABM** | Budget, target accounts, ad format, region, offer | Pipeline range, funnel, CAC, ROI (ZenABM 2026 real data n=211) |
 | **ABM Goal (reverse)** | Target deals, ACV | Spend range needed (median → top performer) |
 | **CRO** | URL or pasted content | Per-dimension 0–10 scorecard + detailed fixes |
+| **Compare** | Your landing page URL + a competitor's | Both scored on the CRO rubric, plus a head-to-head diff |
+| **Analytics import** | GA4 "Pages and screens" CSV export | Parsed page table, optionally matched to a scored URL |
 | **Creative** | Channel, ad copy, image desc | Per-dimension 0–10 + before/after rewrites |
 | **Outbound (cold email)** | Subject, body, goal, LP, open/click rate | Per-dimension 0–10 + rewrites (Polar email as gold standard) |
 | **LTV/CAC** | Simple (CAC + LTV) OR full (ARPU + churn + GM + etc.) | Ratio, verdict, payback, formula derivation |
@@ -38,6 +40,8 @@ gtm-predictor/
 │   ├── server.py              # FastAPI routes
 │   ├── predictor.py           # PPC + ABM math
 │   ├── cro.py                 # URL scrape + LLM scoring
+│   ├── compare.py             # two-page competitor comparison
+│   ├── analytics_import.py    # GA4 CSV export parser
 │   ├── creative.py            # ad copy rubric
 │   ├── lifecycle.py           # cold email scoring + LTV/CAC
 │   ├── benchmarks.py          # public WordStream baselines
@@ -70,6 +74,7 @@ uvicorn server:app --reload --port 8765
 | `OPENAI_API_KEY` | CRO / Creative / Outbound scoring | yes |
 | `ZENABM_TOKEN` | LinkedIn live engagement data | yes (or empty falls through to public benchmarks) |
 | `FIRECRAWL_API_KEY` | Better URL scraping for CRO | optional (built-in scraper as fallback) |
+| `ZENROWS_API_KEY` | Scraping tier for Cloudflare / JS-rendered pages | optional |
 | `GAS_WEBHOOK_URL` | Google Apps Script URL to log gate signups to Sheets | optional |
 | `ALLOWED_EMAILS` | Comma-separated allowlist (gate). Empty = open mode. | optional |
 
@@ -82,6 +87,12 @@ vercel --prod
 ```
 
 Set env vars: `vercel env add <NAME> production` (one at a time).
+
+## Notes on inputs
+
+- URLs may be entered without a protocol; `https://` is added automatically.
+- GA4 exports keyed on **page title** cannot be matched to a URL. Re-export
+  using **Page path and screen class** if you need page matching.
 
 ## Status
 
