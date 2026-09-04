@@ -38,3 +38,5 @@ data/appknox_sem/
 # Test results / logs
 /tmp/
 *.log
+.vercel
+.env*
