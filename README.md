@@ -60,12 +60,27 @@ gtm-predictor/
 ## Run locally
 
 ```bash
-cd backend
-python3.11 -m pip install -r ../requirements.txt
-cp .env.example .env          # add your keys
-uvicorn server:app --reload --port 8765
-# open http://localhost:8765
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements.txt uvicorn
+npx vercel env pull .env.local --environment=production
+./run-local.sh                # http://localhost:8765
 ```
+
+Vercel will not export secret values, so `.env.local` carries `[SENSITIVE]`
+placeholders for `OPENAI_API_KEY`, `ZENABM_TOKEN` and `GTMP`. `run-local.sh`
+drops those placeholders and sources the real values from
+`~/.claude/secrets.zsh`.
+
+Use 3.12 rather than the system Python: production runs a newer runtime, so
+an older local interpreter can accept code that fails once deployed.
+
+## Staging
+
+Work on the `staging` branch. Pushing it builds a Vercel preview with the
+production environment on the real serverless runtime, which catches cold
+starts, the 60s function ceiling and missing env vars that a local server
+cannot. Merge to `main` only once the preview looks right; `main` deploys
+straight to production.
 
 ## Env vars
 
