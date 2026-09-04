@@ -1,0 +1,124 @@
+PLAN — Competitor Compare feature for GTM Predictor
+Written: 2026-09-04. Status: AWAITING APPROVAL. Do not build until approved.
+
+===========================================================
+WHAT IT DOES
+===========================================================
+User enters their landing page URL + up to 2 competitor URLs.
+Tool scrapes all three, scores each on the existing 8-dimension CRO rubric,
+then returns a side-by-side comparison showing:
+  - score per dimension for all 3 sites
+  - where competitors beat you, and the exact copy/element they use
+  - a ranked "steal this" list — specific things to copy, with effort/impact
+
+Why it fits: the existing /cro endpoint already scores one page.
+This is mostly orchestration + a second LLM call for the diff.
+
+===========================================================
+EXISTING CODE IT BUILDS ON (verified, not assumed)
+===========================================================
+backend/cro.py
+  - scrape_url(url)              -> Firecrawl w/ builtin fallback. Already works.
+  - score_content(url,title,txt) -> sync, returns 8-dim JSON. Already works.
+  - CRO_RUBRIC_PROMPT            -> the rubric. Reused unchanged.
+
+backend/server.py
+  - Pattern: pydantic BaseModel + @app.post, try/except -> HTTPException(500)
+  - Existing: /cro (CROReq), /cro/raw (CRORawReq)
+
+index.html
+  - Single-file frontend, tab-based (PPC / ABM / CRO score / Creative score /
+    Outbound / LTV-CAC). New tab follows the same pattern.
+
+===========================================================
+BUILD STEPS
+===========================================================
+1. backend/compare.py (new file)
+   - async def compare_pages(my_url, competitor_urls: list[str]) -> dict
+   - Scrape all 3 concurrently via asyncio.gather (scrape_url already async)
+   - Score each via existing score_content() — no rubric changes
+   - Second LLM call with COMPARE_PROMPT (below) that receives all 3 score
+     objects + page excerpts, returns the diff analysis
+   - Reuse oai() client and gpt-4o-mini, temperature 0.1, same as cro.py
+
+2. COMPARE_PROMPT returns JSON:
+   {
+     "dimension_table": [
+       {"dimension": str, "my_score": int, "competitor_scores": [{"url": str, "score": int}],
+        "verdict": "ahead|behind|tied", "gap": int}
+     ],
+     "they_do_better": [
+       {"dimension": str, "competitor_url": str, "what_they_do": str,
+        "their_actual_copy": str, "why_it_works": str, "source": str}
+     ],
+     "you_do_better": [{"dimension": str, "what_you_do": str}],
+     "steal_list": [
+       {"rank": int, "action": str, "copy_from": str, "effort": "low|med|high",
+        "expected_lift": str}
+     ]
+   }
+   Carries the SAME anti-fabrication rules already added to CRO_RUBRIC_PROMPT:
+   their_actual_copy must be verbatim from the scraped page or "[not found]".
+
+3. backend/server.py — add endpoint
+   class CompareReq(BaseModel):
+       url: str
+       competitors: list[str]   # validate: 1-2 entries
+   @app.post("/compare")
+   async def compare(r: CompareReq): ...
+   Same try/except pattern as /cro.
+
+4. index.html — add "Compare" tab
+   - 3 URL inputs (yours + 2 competitor slots, 2nd optional)
+   - Results: score table (rows=dimensions, cols=sites, gaps colour-coded),
+     then "What they do better" cards, then the ranked steal list
+   - Reuse existing card/score CSS classes — no new design system
+
+===========================================================
+FAILURE CASES / PRE-MORTEM
+===========================================================
+1. LATENCY — 3 scrapes + 4 LLM calls could take 60-90s. User thinks it hung.
+   -> Mitigate: asyncio.gather for scrapes, run the 3 scoring calls
+      concurrently too. Show per-step progress in UI. Set httpx timeout 30s
+      (already the case in scrape_url).
+
+2. COMPETITOR BLOCKS SCRAPING — Datadog/New Relic may 403 a bot UA, or sit
+   behind Cloudflare / a CAPTCHA.
+   -> SOLVED with ZenRows. New fallback chain in scrape_url:
+        Firecrawl (if key) -> ZenRows (if key) -> builtin httpx
+      ZenRows handles Cloudflare, CAPTCHA, and JS rendering, which the builtin
+      scraper cannot. Endpoint: https://api.zenrows.com/v1/
+      params: url, apikey, js_render=true, premium_proxy=true (premium only
+      needed for hard blocks — start without it to control cost).
+      Env var: ZENROWS_API_KEY (add to .env, already gitignored).
+   -> STILL catch per-site failures and return partial results, since even
+      ZenRows can fail. Never let one dead competitor kill the whole request.
+
+3. TOKEN BLOWUP — 3 pages x 20k chars + 3 score objects can exceed context.
+   -> Send only 6k chars per page to the compare call (full 20k still used for
+      individual scoring). Cap max_tokens 4000.
+
+4. FABRICATED COMPETITOR COPY — model invents a competitor headline.
+   -> Anti-fabrication block carried into COMPARE_PROMPT. their_actual_copy
+      must be verbatim or "[not found]". Same bug class already fixed in cro.py.
+
+5. UNFAIR COMPARISON — comparing a homepage to a pricing page scores noise.
+   -> Note in UI: "compare like-for-like pages". Not a code fix.
+
+6. COST — 4 gpt-4o-mini calls per run instead of 1. Still cents, but if this
+   goes public it's 4x. Acceptable; flag only.
+
+7. SCOPE CREEP — do NOT add: historical tracking, scheduled re-runs, more than
+   2 competitors, PDF export. Out of scope for this build.
+
+===========================================================
+ESTIMATE
+===========================================================
+compare.py ~120 lines. server.py ~12 lines. index.html ~150 lines (tab + render).
+No new dependencies. No changes to existing endpoints or rubric.
+
+===========================================================
+OPEN QUESTION FOR CHAITANYA
+===========================================================
+- 2 competitors fixed, or allow 1-3?
+- Should the steal_list be ranked by impact, or by effort (quick wins first)?

@@ -64,6 +64,22 @@ async def scrape_url(url: str) -> dict:
         except Exception:
             pass  # fall through to native
 
+    # ZenRows — handles Cloudflare, CAPTCHA, JS-rendered pages
+    zenrows_key = os.getenv("ZENROWS_API_KEY") or ""
+    if zenrows_key.strip():
+        try:
+            async with httpx.AsyncClient() as c:
+                r = await c.get(
+                    "https://api.zenrows.com/v1/",
+                    params={"url": url, "apikey": zenrows_key.strip(), "js_render": "true"},
+                    timeout=60,
+                )
+            if r.status_code == 200 and r.text.strip():
+                title, text = _html_to_text(r.text)
+                return {"markdown": text, "metadata": {"title": title}, "scraper": "zenrows"}
+        except Exception:
+            pass  # fall through to builtin
+
     # Built-in fallback — fetch + parse, no external service needed
     async with httpx.AsyncClient(follow_redirects=True) as c:
         r = await c.get(url, timeout=30, headers={
@@ -92,6 +108,13 @@ Sources to cite:
 - NN/g (clarity heuristics)
 - Unbounce Conversion Benchmark Report 2024
 - HubSpot State of Marketing 2024
+
+CRITICAL — never fabricate:
+- Do NOT invent names, job titles, company names, or metrics in after_suggestion.
+- If a rewrite needs attribution or a number, use a bracketed placeholder:
+  "[customer name, title, company]" or "[X]%".
+- Only quote people or companies that appear verbatim in the page content provided.
+- before_quote must be text actually present on the page, or "[missing]".
 
 For EVERY dimension, return a DETAILED fix — not a 1-liner.
 
@@ -133,7 +156,7 @@ Return JSON only:
 
 def score_content(url: str, title: str, content: str) -> dict:
     """Score pre-scraped content (skips Firecrawl)."""
-    return _score_with_llm(url, title, content[:8000])
+    return _score_with_llm(url, title, content[:20000])
 
 
 def _score_with_llm(url: str, title: str, content: str) -> dict:
@@ -148,7 +171,7 @@ def _score_with_llm(url: str, title: str, content: str) -> dict:
             {"role": "user", "content": f"URL: {url}\nTitle: {title}\n\nPage content:\n{content}\n\nScore vs rubric and reference pages."},
         ],
         response_format={"type": "json_object"},
-        temperature=0.3,
+        temperature=0.1,
         max_tokens=4000,
     )
     data = json.loads(resp.choices[0].message.content)
@@ -158,7 +181,7 @@ def _score_with_llm(url: str, title: str, content: str) -> dict:
 
 async def score_url(url: str) -> dict:
     page = await scrape_url(url)
-    content = (page.get("markdown") or "")[:8000]
+    content = (page.get("markdown") or "")[:20000]
     title = page.get("metadata", {}).get("title", "")
     result = _score_with_llm(url, title, content)
     result["scraper_used"] = page.get("scraper", "firecrawl")

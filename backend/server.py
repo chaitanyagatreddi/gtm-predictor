@@ -10,6 +10,7 @@ load_dotenv()
 
 from predictor import predict_ppc, predict_abm
 from cro import score_url, score_content
+from compare import compare_pages
 from creative import score_creative
 from lifecycle import score_sequence, ltv_cac
 
@@ -90,6 +91,17 @@ class CRORawReq(BaseModel):
 @app.post("/cro/raw")
 def cro_raw(r: CRORawReq):
     try: return score_content(r.url, r.title, r.content)
+    except Exception as e: raise HTTPException(500, str(e))
+
+
+class CompareReq(BaseModel):
+    url: str
+    competitor: str
+
+
+@app.post("/compare")
+async def compare(r: CompareReq):
+    try: return await compare_pages(r.url, r.competitor)
     except Exception as e: raise HTTPException(500, str(e))
 
 
