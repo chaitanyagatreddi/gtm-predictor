@@ -1,0 +1,83 @@
+PLAN — info notes + error states for all features
+=================================================
+
+PART A — "!" info note per panel
+--------------------------------
+Small "!" circle at the top-right of each panel. Click toggles a note box
+below it; click again closes. Not hover (unusable on touch).
+One shared helper builds the icon + box from a NOTES map, so adding a tab
+later means adding one string.
+
+Note text (drafted from the code and README, no invented numbers):
+
+PPC        Forecasts a full funnel from budget. CRO and Creative scores are
+           0-1 - run those tabs first and divide the /10 score by 10.
+           Benchmarks: Kaggle medians, WordStream 2023 fallback.
+ABM        LinkedIn ABM forecast on ZenABM 2026 real data (n=211, $5.5M
+           spend). Pick the ad format you will actually run; CTR and CPC
+           differ sharply by format.
+ABM Goal   Reverse mode. Enter deals wanted and ACV, get the spend range
+           from median to top performer.
+CRO        Paste a URL (protocol optional) or raw page content. Scored
+           0-10 across 8 dimensions with before/after fixes. JS-only pages
+           may return very little text.
+Compare    Your page against a competitor's, both on the CRO rubric, plus a
+           head-to-head diff. Takes roughly 30-60s - three LLM passes.
+Analytics  GA4 > Reports > Engagement > Pages and screens > set dimension to
+           "Page path and screen class" > Share > Download CSV. The page
+           title export gives metrics but cannot be matched to a URL.
+Creative   Ad copy scored per channel. Image description is optional but
+           changes the score.
+Outbound   One cold email, not a sequence. Open and click rates are your
+           own assumptions, used only for the downstream math.
+LTV/CAC    Simple mode needs CAC and LTV. Full mode derives LTV from ARPU,
+           churn and gross margin, and shows the formula.
+
+PART B — error states
+---------------------
+Current gaps, all verified in index.html:
+
+1. post() has no try/catch. A network failure or a non-JSON response throws,
+   the promise rejects, and the panel is stuck on "loading..." forever with
+   no message.
+   FIX: wrap fetch + r.json() in try/catch; return {__error: message}.
+   Include the HTTP status when the response is not ok.
+
+2. No pre-submit validation. Empty URL, empty ad copy or empty email body
+   are sent to the API and come back as a raw 422 or 500 JSON blob.
+   FIX: per-tab required-field check before the request. Show a plain
+   message in the output area and skip the call.
+   Required: CRO url; Compare url + competitor; Creative copy;
+   Outbound subject + body; LTV/CAC the fields for the active mode;
+   Analytics a loaded file (already handled).
+
+3. Server errors render as a raw JSON dump. FastAPI returns {"detail": ...}
+   and only renderAnalytics and renderCompare read it.
+   FIX: one renderError(msg) card used by every tab, matching the existing
+   card style, shown whenever data.detail or data.__error is present.
+
+4. Numeric fields accept blank and NaN. Number('') is 0, so a blank budget
+   silently forecasts on 0.
+   FIX: treat blank required numbers as missing and say which field.
+
+FAILURE CASES / PRE-MORTEM
+--------------------------
+- The "!" box could push layout and hide the form on mobile. Mitigate: the
+  box is inline, below the icon, full panel width, and closed by default.
+- Aggressive validation could block a legitimately optional field. Only the
+  fields listed above are required; everything else stays optional.
+- The Clear-result button shows on any pre content, so error cards will get
+  a Clear button too. That is intended.
+- renderError must escape its input; a server message is not trusted HTML.
+- The regex-based validation must not reject valid input such as a URL with
+  a port or a path.
+
+VERIFICATION
+------------
+- node --check on the extracted inline script.
+- In the browser: toggle each "!", submit each tab empty, and simulate a
+  failed fetch to confirm no panel stays on "loading...".
+
+FILES TOUCHED
+-------------
+index.html only. No backend change.

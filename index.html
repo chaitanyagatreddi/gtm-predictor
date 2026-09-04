@@ -92,7 +92,13 @@ pre{background:var(--surface);padding:1rem;border-radius:var(--radius-sm);overfl
 .gate-card button{width:100%;margin-top:1rem}
 .gate-err{color:#ef4444;font-size:.85rem;margin-top:.75rem;font-weight:600}
 .gate-loading{color:var(--text-muted);font-size:.85rem;margin-top:.75rem}
-</style></head><body>
+</style>
+<!-- Loader stack. framer-motion is not published on cdnjs, hence the second CDN.
+     Order matters: framer-motion reads the React global at load time. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/framer-motion@11.11.17/dist/framer-motion.js"></script>
+</head><body>
 
 <div id="gate" class="gate-overlay">
   <div class="gate-card">
@@ -125,17 +131,20 @@ async function gateSubmit(){
   if(!email || !email.includes('@')){ msg.innerHTML = '<div class="gate-err">Valid work email required</div>'; return; }
   if(!role){ msg.innerHTML = '<div class="gate-err">Role required</div>'; return; }
   if(!title){ msg.innerHTML = '<div class="gate-err">Title required</div>'; return; }
-  msg.innerHTML = '<div class="gate-loading">Logging you in...</div>';
+  const stopGateLoader = startLoader(msg, LOADER_MESSAGES.gate);
   try{
     const r = await fetch('/gate', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email,name,role,title})});
     const data = await r.json();
+    await stopGateLoader();
     if(data.ok){
+      msg.innerHTML = '';
       localStorage.setItem(GATE_KEY, email);
       document.getElementById('gate').style.display='none';
     } else {
       msg.innerHTML = '<div class="gate-err">Access denied</div>';
     }
   } catch(e){
+    await stopGateLoader();
     msg.innerHTML = '<div class="gate-err">Network error — '+e.message+'</div>';
   }
 }
@@ -339,11 +348,15 @@ function show(t){
   if(t==='analytics') initAnalytics();
 }
 
-// Every panel writes its result into a <pre>. Nothing used to clear those, so a
-// stale result (or error) stayed on screen until the page was refreshed.
+// Every panel writes its result into a <pre>, and run() may replace that with a
+// rendered card. Nothing used to clear either, so a stale result stayed on
+// screen until the page was refreshed.
 function clearOutput(pre){
   pre.innerHTML = '';
-  const btn = pre.parentElement.querySelector('.clear-btn');
+  pre.style.display = 'block';
+  const panel = pre.closest('.panel');
+  panel.querySelectorAll('.rendered').forEach(r => r.innerHTML = '');
+  const btn = panel.querySelector('.clear-btn');
   if(btn) btn.style.display = 'none';
   if(pre.id === 'an_out') resetAnalyticsFile();
 }
@@ -358,21 +371,29 @@ function resetAnalyticsFile(){
   if(dt) dt.textContent = 'Drop your CSV here, or click to choose';
 }
 
-// Show a Clear button next to a result as soon as that result appears.
+// One Clear button per panel, appended last so it never sits between a <pre>
+// and the .rendered div that run() looks for as pre.nextElementSibling.
 function wireClearButtons(){
-  document.querySelectorAll('.panel pre').forEach(pre => {
+  document.querySelectorAll('.panel').forEach(panel => {
+    const pres = panel.querySelectorAll('pre');
+    if(!pres.length) return;
     const btn = document.createElement('button');
     btn.className = 'clear-btn';
     btn.textContent = 'Clear result';
-    btn.style.cssText = 'display:none;margin-top:.8rem;padding:.45rem .9rem;'
+    btn.style.cssText = 'display:none;margin-top:1rem;padding:.45rem .9rem;'
       + 'border:1px solid var(--accent);border-radius:999px;background:transparent;'
       + "color:var(--text-muted);font-family:'Figtree',sans-serif;font-size:.82rem;"
       + 'font-weight:600;cursor:pointer';
-    btn.onclick = () => clearOutput(pre);
-    pre.parentElement.insertBefore(btn, pre.nextSibling);
+    btn.onclick = () => pres.forEach(clearOutput);
+    panel.appendChild(btn);
+    const hasOutput = () => Array.from(pres).some(pre => {
+      const host = pre.nextElementSibling;
+      const rendered = host && host.classList.contains('rendered') ? host.innerHTML.trim() : '';
+      return pre.textContent.trim() || rendered;
+    });
     new MutationObserver(() => {
-      btn.style.display = pre.textContent.trim() ? 'inline-block' : 'none';
-    }).observe(pre, {childList:true, characterData:true, subtree:true});
+      btn.style.display = hasOutput() ? 'inline-block' : 'none';
+    }).observe(panel, {childList:true, characterData:true, subtree:true});
   });
 }
 document.addEventListener('DOMContentLoaded', wireClearButtons);
@@ -392,9 +413,168 @@ function wireUrlFields(){
   });
 }
 document.addEventListener('DOMContentLoaded', wireUrlFields);
+
+// Short note per panel, shown by the "!" icon in the panel's top-right.
+const NOTES = {
+  ppc: 'Forecasts a full funnel from budget. CRO and Creative scores are 0-1 \u2014 run those tabs first and divide the /10 score by 10. Benchmarks: Kaggle medians, WordStream 2023 as fallback.',
+  abm: 'LinkedIn ABM forecast on ZenABM 2026 real data (n=211, $5.5M spend). Pick the ad format you will actually run \u2014 CTR and CPC differ sharply by format. The reverse section below takes deals wanted and ACV, and returns the spend range from median to top performer.',
+  cro: 'Paste a URL (protocol optional) or raw page content. Scored 0-10 across 8 dimensions with before/after fixes. Pages that render entirely in JavaScript may return very little text.',
+  analytics: 'GA4 \u203a Reports \u203a Engagement \u203a Pages and screens \u203a set the dimension to "Page path and screen class" \u203a Share \u203a Download CSV. The page title export still gives metrics, but titles cannot be matched to a URL.',
+  compare: 'Your page against a competitor\u2019s, both scored on the CRO rubric, plus a head-to-head diff. Takes roughly 30-60 seconds \u2014 three model passes.',
+  creative: 'Ad copy scored against the channel you pick. The image description is optional, but it changes the score.',
+  lifecycle: 'One cold email, not a sequence. Open and click rates are your own assumptions and only feed the downstream math.',
+  ltvcac: 'Simple mode needs CAC and LTV. Full mode derives LTV from ARPU, churn and gross margin, and shows the formula it used.',
+};
+function wireNotes(){
+  Object.entries(NOTES).forEach(([id, text]) => {
+    const panel = document.getElementById(id);
+    if(!panel) return;
+    panel.style.position = 'relative';
+
+    const icon = document.createElement('button');
+    icon.textContent = '!';
+    icon.setAttribute('aria-label', 'About this tool');
+    icon.style.cssText = 'position:absolute;top:1rem;right:1rem;width:1.6rem;height:1.6rem;'
+      + 'border-radius:50%;border:1px solid var(--accent);background:transparent;'
+      + "color:var(--text-muted);font-family:'Figtree',sans-serif;font-weight:700;"
+      + 'font-size:.85rem;line-height:1;cursor:pointer;padding:0';
+
+    const box = document.createElement('div');
+    box.textContent = text;
+    box.hidden = true;
+    box.style.cssText = 'background:var(--accent);border-radius:var(--radius);'
+      + 'padding:.9rem 1rem;margin-bottom:1.2rem;font-size:.86rem;line-height:1.5;'
+      + 'color:var(--text-muted)';
+
+    icon.onclick = () => { box.hidden = !box.hidden; };
+    panel.insertBefore(box, panel.firstChild);
+    panel.insertBefore(icon, panel.firstChild);
+  });
+}
+document.addEventListener('DOMContentLoaded', wireNotes);
+
+// Progress loader, ported from the GoHook demo's LoadingScreen but driven by
+// the real request instead of a fixed timer: the bar eases toward 90% and only
+// completes when the response lands, so a slow call never looks finished.
+const LOADER_MESSAGES = {
+  ppc:      ['Pulling channel benchmarks\u2026','Building the funnel\u2026','Working out CAC and ROI\u2026'],
+  abm:      ['Loading ZenABM 2026 data\u2026','Modelling account reach\u2026','Estimating pipeline\u2026'],
+  abmgoal:  ['Working backwards from your deal target\u2026','Sizing the spend range\u2026'],
+  cro:      ['Fetching your page\u2026','Reading the copy\u2026','Scoring against the rubric\u2026','Writing the fixes\u2026'],
+  compare:  ['Fetching both pages\u2026','Scoring yours\u2026','Scoring the competitor\u2026','Comparing head to head\u2026'],
+  creative: ['Reading your ad copy\u2026','Scoring against the channel\u2026','Drafting rewrites\u2026'],
+  lifecycle:['Reading your email\u2026','Scoring subject and body\u2026','Drafting rewrites\u2026'],
+  ltvcac:   ['Running the numbers\u2026','Deriving the formula\u2026'],
+  gate:     ['Checking your access\u2026','Setting things up\u2026'],
+};
+const STEP_MS = 1400;
+
+function startLoader(host, messages){
+  // React + framer-motion when the CDNs are up; the vanilla path below is a
+  // straight fallback so a blocked CDN costs the animation, not the feature.
+  return (window.React && window.ReactDOM && window.Motion)
+    ? reactLoader(host, messages)
+    : vanillaLoader(host, messages);
+}
+
+function reactLoader(host, messages){
+  const {createElement: h, useState, useEffect} = window.React;
+  const {motion, AnimatePresence} = window.Motion;
+  const root = window.ReactDOM.createRoot(host);
+
+  // A fast response can call stop() before React's mount effect runs, so the
+  // completion request is recorded on a controller the effect reads on mount
+  // rather than on a handler that may not exist yet.
+  const ctl = {requested:false, trigger:null, resolve:null};
+  const done = new Promise(res => { ctl.resolve = res; });
+
+  function Loader(){
+    const [step, setStep] = useState(0);
+    const [pct, setPct] = useState(8);
+    const [complete, setComplete] = useState(false);
+
+    useEffect(() => {
+      // Asymptotic toward 90%: a slow call must never look finished.
+      const t = setInterval(() => {
+        setPct(p => p + (90 - p) * 0.35);
+        setStep(s => Math.min(s + 1, messages.length - 1));
+      }, STEP_MS);
+      ctl.trigger = () => { clearInterval(t); setComplete(true); };
+      if(ctl.requested) ctl.trigger();
+      return () => clearInterval(t);
+    }, []);
+
+    useEffect(() => { if(complete) ctl.resolve(); }, [complete]);
+
+    return h('div', {style:{display:'flex',flexDirection:'column',alignItems:'center',gap:'1rem',padding:'2rem 0'}},
+      h('div', {style:{width:'100%',maxWidth:'280px',height:'6px',borderRadius:'999px',
+                       background:'var(--accent)',overflow:'hidden'}},
+        h(motion.div, {
+          style:{height:'100%',borderRadius:'999px',background:'var(--primary)'},
+          animate:{width: (complete ? 100 : pct) + '%'},
+          transition:{duration: complete ? 0.3 : STEP_MS/1000, ease:'easeInOut'},
+        })),
+      h(AnimatePresence, {mode:'wait'},
+        h(motion.p, {
+          key: step,
+          initial:{opacity:0, y:8}, animate:{opacity:1, y:0}, exit:{opacity:0, y:-8},
+          transition:{duration:0.25},
+          style:{color:'var(--text-muted)',fontFamily:"'Figtree',sans-serif",
+                 fontSize:'.88rem',letterSpacing:'.01em',margin:0},
+        }, messages[step])));
+  }
+
+  root.render(h(Loader));
+  const started = Date.now();
+  return async function stop(){
+    ctl.requested = true;
+    if(ctl.trigger) ctl.trigger();
+    // Guard: a loader must never be able to block the result from rendering.
+    await Promise.race([done, new Promise(res => setTimeout(res, 1200))]);
+    // Never flash: hold the completed bar briefly if the call returned instantly.
+    await new Promise(res => setTimeout(res, Math.max(0, 400 - (Date.now() - started)) + 220));
+    root.unmount();
+  };
+}
+
+function vanillaLoader(host, messages){
+  host.innerHTML = `<div class="ldr" style="display:flex;flex-direction:column;align-items:center;gap:1rem;padding:2rem 0">
+      <div style="width:100%;max-width:280px;height:6px;border-radius:999px;background:var(--accent);overflow:hidden">
+        <div class="ldr-bar" style="height:100%;width:0;border-radius:999px;background:var(--primary);transition:width .6s ease-in-out"></div>
+      </div>
+      <div class="ldr-msg" style="color:var(--text-muted);font-family:'Figtree',sans-serif;font-size:.88rem;letter-spacing:.01em;transition:opacity .25s ease">${messages[0]}</div>
+    </div>`;
+  const bar = host.querySelector('.ldr-bar');
+  const msg = host.querySelector('.ldr-msg');
+  let step = 0, pct = 8;
+  requestAnimationFrame(() => { bar.style.width = pct + '%'; });
+  const tick = setInterval(() => {
+    pct += (90 - pct) * 0.35;
+    bar.style.width = pct + '%';
+    step = Math.min(step + 1, messages.length - 1);
+    msg.style.opacity = '0';
+    setTimeout(() => { msg.textContent = messages[step]; msg.style.opacity = '1'; }, 250);
+  }, STEP_MS);
+  const started = Date.now();
+  return function stop(){
+    clearInterval(tick);
+    bar.style.width = '100%';
+    const held = Math.max(0, 400 - (Date.now() - started));
+    return new Promise(res => setTimeout(res, held + 220));
+  };
+}
+
 async function post(url,body){
-  const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-  return r.json();
+  try {
+    const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    let data;
+    try { data = await r.json(); }
+    catch { return {__error: `Server returned ${r.status} ${r.statusText||''} with no readable body.`.trim()}; }
+    if(!r.ok && !data.detail) return {__error: `Request failed (HTTP ${r.status}).`};
+    return data;
+  } catch(e) {
+    return {__error: 'Could not reach the server. Check your connection and try again.'};
+  }
 }
 function scoreClass(s){return s>=8?'s-high':s>=5?'s-mid':'s-low'}
 function scoreColor(s){return s>=8?'#10b981':s>=5?'#f59e0b':'#ef4444'}
@@ -935,6 +1115,47 @@ function renderScorecard(data){
   return html;
 }
 
+// Required fields per tab. Everything not listed stays optional.
+const REQUIRED = {
+  ppc:      [['p_budget','a budget'],['p_acv','an ACV']],
+  abm:      [['a_budget','a budget'],['a_accts','target accounts'],['a_acv','an ACV']],
+  abmgoal:  [['ag_deals','target deals'],['ag_acv','an ACV']],
+  cro:      [['c_url','a landing page URL']],
+  compare:  [['cmp_url','your landing page URL'],['cmp_rival','a competitor URL']],
+  creative: [['cr_copy','your ad copy']],
+  lifecycle:[['lc_subject','a subject line'],['lc_seq','the email body']],
+};
+function missingFields(t){
+  let fields = REQUIRED[t] || [];
+  if(t === 'ltvcac'){
+    fields = ltvMode === 'simple'
+      ? [['lt_cac_simple','CAC'],['lt_ltv_simple','LTV']]
+      : [['lt_cac','CAC'],['lt_arpu','monthly ARPU'],['lt_churn','monthly churn'],['lt_gm','gross margin']];
+  }
+  return fields.filter(([id]) => {
+    const el = document.getElementById(id);
+    if(!el) return false;
+    const v = el.value.trim();
+    // A blank number field reads as 0, which would silently forecast on zero.
+    return !v || (el.type === 'number' && !Number.isFinite(Number(v)));
+  }).map(([,label]) => label);
+}
+
+// Server messages are not trusted HTML.
+function showError(outEl, msg){
+  const esc = String(msg==null?'':msg).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  outEl.style.display='none';
+  let host = outEl.nextElementSibling;
+  if(!host || !host.classList.contains('rendered')){
+    host = document.createElement('div');
+    host.className = 'rendered';
+    outEl.parentNode.insertBefore(host, outEl.nextSibling);
+  }
+  host.innerHTML = `<div class="card" style="border-left:3px solid #ef4444">
+    <h3 style="margin-top:0">That did not go through</h3>
+    <p style="font-size:.9rem;color:var(--text-muted);margin-bottom:0">${esc}</p></div>`;
+}
+
 async function run(t){
   const v = id => document.getElementById(id).value;
   const n = id => Number(v(id));
@@ -957,8 +1178,33 @@ async function run(t){
     }
   }
   const outEl = document.getElementById(out);
-  outEl.textContent='loading...';
+
+  const missing = missingFields(t);
+  if(missing.length){
+    const list = missing.length > 1
+      ? missing.slice(0,-1).join(', ') + ' and ' + missing[missing.length-1]
+      : missing[0];
+    showError(outEl, 'Fill in ' + list + ' first.');
+    return;
+  }
+
+  outEl.style.display='none';
+  outEl.textContent='';
+  let host = outEl.nextElementSibling;
+  if(!host || !host.classList.contains('rendered')){
+    host = document.createElement('div');
+    host.className = 'rendered';
+    outEl.parentNode.insertBefore(host, outEl.nextSibling);
+  }
+  const stopLoader = startLoader(host, LOADER_MESSAGES[t] || ['Working\u2026']);
   const data = await post(url,body);
+  await stopLoader();
+  host.innerHTML = '';
+
+  if(data && (data.__error || (data.detail && !data.dimension_table))){
+    showError(outEl, data.__error || data.detail);
+    return;
+  }
   // Pretty render: scorecard (cro/creative/lifecycle), ABM, ABM goal
   let rendered = null;
   if(['cr_out','c_out','lc_out'].includes(out) && data && data.dimensions){
