@@ -5,7 +5,7 @@ rubric, then diff them into a "what they do better / steal this" report.
 Reuses scrape_url + score_content + the OpenAI client from cro.py.
 """
 import asyncio, json
-from cro import scrape_url, score_content, oai
+from cro import scrape_url, score_content, oai, BLOCKED_MSG
 
 
 COMPARE_PROMPT = """You are a CRO expert comparing two landing pages.
@@ -42,6 +42,13 @@ Return JSON only:
 }"""
 
 
+def _scrape_error(which: str, err: str) -> str:
+    """Blocked sites get the explanation as-is; anything else keeps its cause."""
+    if BLOCKED_MSG in err:
+        return f"Could not read {which}. {BLOCKED_MSG}"
+    return f"Could not scrape {which}: {err}"
+
+
 async def _scrape_one(url: str) -> dict:
     """Scrape a single URL, never raise — return an error marker instead."""
     try:
@@ -54,7 +61,11 @@ async def _scrape_one(url: str) -> dict:
             "scraper": page.get("scraper", "firecrawl"),
         }
     except Exception as e:
-        return {"url": url, "ok": False, "error": f"{type(e).__name__}: {e}"}
+        # A number of httpx exceptions carry an empty str(), so the type name
+        # alone is the whole message in those cases.
+        detail = str(e).strip()
+        label = type(e).__name__
+        return {"url": url, "ok": False, "error": f"{label}: {detail}" if detail else label}
 
 
 async def compare_pages(my_url: str, competitor_url: str) -> dict:
@@ -64,13 +75,13 @@ async def compare_pages(my_url: str, competitor_url: str) -> dict:
     )
 
     if not mine["ok"]:
-        raise RuntimeError(f"Could not scrape your page: {mine['error']}")
+        raise RuntimeError(_scrape_error("your page", mine["error"]))
     if not theirs["ok"]:
         return {
             "partial": True,
             "my_url": my_url,
             "competitor_url": competitor_url,
-            "error": f"Could not scrape competitor: {theirs['error']}",
+            "error": _scrape_error("the competitor page", theirs["error"]),
             "my_score": score_content(my_url, mine["title"], mine["content"]),
         }
 

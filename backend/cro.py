@@ -47,6 +47,15 @@ def _html_to_text(raw_html: str) -> tuple[str, str]:
     return title, body
 
 
+# Anti-bot protection answers a plain fetch with one of these. Without a
+# ZenRows or Firecrawl key configured there is no tier that can get past it,
+# so the user gets an explanation rather than a raw HTTP status.
+BLOCKED_STATUSES = {401, 403, 429, 503}
+BLOCKED_MSG = ("This site uses a bot challenge that our scraper cannot pass. "
+               "Premium scraping is coming soon \u2014 for now, paste the page "
+               "content into the CRO tab.")
+
+
 async def scrape_url(url: str) -> dict:
     """Try Firecrawl (if key set) → fall back to built-in scraper."""
     url = url.strip()
@@ -89,6 +98,8 @@ async def scrape_url(url: str) -> dict:
         r = await c.get(url, timeout=30, headers={
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
         })
+    if r.status_code in BLOCKED_STATUSES:
+        raise RuntimeError(BLOCKED_MSG)
     if r.status_code >= 400:
         raise RuntimeError(f"Page fetch failed: HTTP {r.status_code}")
     title, text = _html_to_text(r.text)
