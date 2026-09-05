@@ -349,26 +349,26 @@ window.addEventListener('DOMContentLoaded', gateCheck);
 </div>
 
 <div id="ltvcac" class="panel">
-  <h3 style="margin-top:0;color:#a78bfa;font-size:1.3rem;font-weight:700">LTV:CAC Ratio Calculator</h3>
-  <p style="color:#94a3b8;font-size:.9rem;margin:.25rem 0 1.5rem">Inspired by <a href="https://portermetrics.com/en/free-tools/calculators/free-cacltv-ratio/" target="_blank" style="color:#60a5fa">Porter Metrics</a> · formula <a href="https://www.wallstreetprep.com/knowledge/ltv-cac-ratio/" target="_blank" style="color:#60a5fa">Wall Street Prep</a></p>
+  <h3 style="margin-top:0;color:var(--primary);font-size:1.3rem;font-weight:700">LTV:CAC Ratio Calculator</h3>
+  <p style="color:var(--text-muted);font-size:.9rem;margin:.25rem 0 1.5rem">Inspired by <a href="https://portermetrics.com/en/free-tools/calculators/free-cacltv-ratio/" target="_blank" style="color:var(--primary)">Porter Metrics</a> · formula <a href="https://www.wallstreetprep.com/knowledge/ltv-cac-ratio/" target="_blank" style="color:var(--primary)">Wall Street Prep</a></p>
 
-  <div style="background:#1a1a2e;border:1px solid #2d2d4d;border-radius:10px;padding:1.5rem;margin-bottom:1rem">
+  <div style="background:var(--accent);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1.5rem;margin-bottom:1rem">
     <div style="display:flex;gap:.5rem;margin-bottom:1rem">
-      <button type="button" id="lt_mode_simple" onclick="ltMode('simple')" style="flex:1;background:#4f46e5;color:white;border:none;padding:.6rem;border-radius:6px;cursor:pointer;font-weight:600">Simple (2 inputs)</button>
-      <button type="button" id="lt_mode_full" onclick="ltMode('full')" style="flex:1;background:#222;color:#aaa;border:1px solid #333;padding:.6rem;border-radius:6px;cursor:pointer">Calculate LTV from inputs</button>
+      <button type="button" id="lt_mode_simple" onclick="ltMode('simple')" style="flex:1;background:var(--primary);color:#fff;border:1px solid var(--primary);padding:.6rem;border-radius:var(--radius-sm);cursor:pointer;font-weight:600;font-family:'Figtree',sans-serif">Simple (2 inputs)</button>
+      <button type="button" id="lt_mode_full" onclick="ltMode('full')" style="flex:1;background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:.6rem;border-radius:var(--radius-sm);cursor:pointer;font-weight:600;font-family:'Figtree',sans-serif">Calculate LTV from inputs</button>
     </div>
 
     <div id="lt_simple_block">
       <div class="row">
         <div>
-          <label style="color:#aaa;font-size:.9rem">Customer Acquisition Cost (CAC) $</label>
+          <label style="font-size:.9rem">Customer Acquisition Cost (CAC) $</label>
           <input id="lt_cac_simple" type="number" value="200" style="font-size:1.1rem">
-          <div style="font-size:.72rem;color:#666;margin-top:.25rem">Total cost to acquire one new customer</div>
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.25rem">Total cost to acquire one new customer</div>
         </div>
         <div>
-          <label style="color:#aaa;font-size:.9rem">Customer Lifetime Value (LTV) $</label>
+          <label style="font-size:.9rem">Customer Lifetime Value (LTV) $</label>
           <input id="lt_ltv_simple" type="number" value="800" style="font-size:1.1rem">
-          <div style="font-size:.72rem;color:#666;margin-top:.25rem">Total revenue from one customer over their lifetime</div>
+          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.25rem">Total revenue from one customer over their lifetime</div>
         </div>
       </div>
     </div>
@@ -1057,10 +1057,12 @@ function ltMode(m){
   document.getElementById('lt_full_block').style.display = m==='full'?'block':'none';
   const simple = document.getElementById('lt_mode_simple');
   const full = document.getElementById('lt_mode_full');
-  simple.style.background = m==='simple'?'#4f46e5':'#222';
-  simple.style.color = m==='simple'?'white':'#aaa';
-  full.style.background = m==='full'?'#4f46e5':'#222';
-  full.style.color = m==='full'?'white':'#aaa';
+  const on = { bg:'var(--primary)', fg:'#fff', border:'var(--primary)' };
+  const off = { bg:'transparent', fg:'var(--text-muted)', border:'var(--border)' };
+  [[simple, m==='simple'], [full, m==='full']].forEach(([el, active]) => {
+    const t = active ? on : off;
+    el.style.background = t.bg; el.style.color = t.fg; el.style.borderColor = t.border;
+  });
 }
 
 function renderABM(d){
