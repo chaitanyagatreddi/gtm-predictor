@@ -19,11 +19,44 @@
   --radius-sm:10px;
 }
 *{box-sizing:border-box}
-body{font-family:'Figtree',-apple-system,sans-serif;max-width:1000px;margin:2rem auto;padding:1.5rem;background:var(--bg);color:var(--text);font-size:16px;line-height:1.5}
+body{font-family:'Figtree',-apple-system,sans-serif;margin:0;padding:0;background:var(--bg);color:var(--text);font-size:16px;line-height:1.5}
 h1{font-family:'Rubik',sans-serif;font-size:2.5rem;font-weight:800;color:var(--text);letter-spacing:-0.02em;margin:0 0 .5rem}
 h3{font-family:'Rubik',sans-serif;font-weight:700;color:var(--text);letter-spacing:-0.01em}
 .subtitle{color:var(--text-muted);font-size:1.05rem;margin:0 0 2rem}
 
+/* Shell — left rail for tools, content on the right.
+   Structure borrowed from VaultSignal's DrawerWrapper; colours are this
+   app's own, so there is one blue across the product. */
+.shell{display:flex;align-items:flex-start;min-height:100vh}
+.rail{position:sticky;top:0;flex:0 0 15rem;width:15rem;height:100vh;
+  background:#0B1180;color:#fff;display:flex;flex-direction:column;
+  padding:1.25rem 0 1rem}
+.rail-brand{font-family:'Rubik',sans-serif;font-size:1.15rem;font-weight:800;
+  letter-spacing:-0.02em;padding:0 1.25rem;margin-bottom:1.5rem}
+.rail-nav{flex:1;overflow-y:auto;padding:0 .9rem;display:flex;flex-direction:column;gap:.25rem}
+.rail-item{display:flex;align-items:center;gap:12px;padding:.55rem .75rem;border-radius:var(--radius-sm);
+  color:rgba(255,255,255,.75);text-decoration:none;font-size:.9rem;font-weight:600;
+  transition:background .15s,color .15s;white-space:nowrap}
+.rail-item svg{width:18px;height:18px;flex:none}
+.rail-item:hover{background:rgba(255,255,255,.12);color:#fff}
+.rail-item.active{background:var(--primary);color:#fff}
+.rail-foot{padding:.75rem 1.25rem 0;border-top:1px solid rgba(255,255,255,.12);margin-top:.75rem}
+
+.content{flex:1;min-width:0;max-width:1000px;padding:2rem 2rem 3rem}
+.content-head{margin-bottom:1.5rem}
+
+/* Collapsed rail: icons only. A drawer would need an overlay, focus
+   trapping and an escape path, which is a bigger build than this warrants. */
+@media (max-width:900px){
+  .rail{flex-basis:4rem;width:4rem;padding-left:0;padding-right:0}
+  .rail-brand{font-size:0;padding:0;margin-bottom:1rem;text-align:center}
+  .rail-brand::before{content:'GP';font-size:1rem}
+  .rail-nav{padding:0 .5rem;align-items:center}
+  .rail-item{justify-content:center;padding:.6rem}
+  .rail-item span{display:none}
+  .rail-foot{padding:.75rem .5rem 0;display:flex;justify-content:center}
+  .content{padding:1.25rem}
+}
 .tabs{display:flex;gap:.4rem;margin-bottom:1.5rem;flex-wrap:wrap;background:var(--accent);padding:.4rem;border-radius:var(--radius)}
 .tabs button{background:transparent;color:var(--text-muted);border:none;padding:.65rem 1.1rem;cursor:pointer;border-radius:var(--radius-sm);font-family:'Figtree',sans-serif;font-weight:600;font-size:.92rem;transition:all .15s}
 .tabs button:hover{color:var(--primary)}
@@ -178,23 +211,42 @@ document.getElementById('gate_email')?.addEventListener('keydown', e => { if(e.k
 window.addEventListener('DOMContentLoaded', gateCheck);
 </script>
 
-<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
-  <div>
-    <h1>GTM Predictor</h1>
-    <p class="subtitle">Spend, score, and ship — all in one place</p>
+<div class="shell">
+<nav class="rail">
+  <div class="rail-brand">GTM Predictor</div>
+  <div class="rail-nav">
+    <a href="#ppc" data-tab="ppc" class="rail-item active" onclick="show('ppc');return false" title="PPC">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg>
+      <span>PPC</span></a>
+    <a href="#abm" data-tab="abm" class="rail-item" onclick="show('abm');return false" title="ABM">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="1"/></svg>
+      <span>ABM</span></a>
+    <a href="#cro" data-tab="cro" class="rail-item" onclick="show('cro');return false" title="CRO score">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v12H4z"/><path d="M8 20h8"/><path d="M7 9l3 3 5-5"/></svg>
+      <span>CRO score</span></a>
+    <a href="#compare" data-tab="compare" class="rail-item" onclick="show('compare');return false" title="Compare">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="7" height="14" rx="1"/><rect x="14" y="5" width="7" height="14" rx="1"/></svg>
+      <span>Compare</span></a>
+    <a href="#analytics" data-tab="analytics" class="rail-item" onclick="show('analytics');return false" title="Analytics import">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9"/><path d="M10 19V5"/><path d="M16 19v-7"/><path d="M22 19H2"/></svg>
+      <span>Analytics import</span></a>
+    <a href="#gsc" data-tab="gsc" class="rail-item" onclick="show('gsc');return false" title="Search Console">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <span>Search Console</span></a>
+    <a href="#creative" data-tab="creative" class="rail-item" onclick="show('creative');return false" title="Creative score">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 15l-5-5-6 6"/></svg>
+      <span>Creative score</span></a>
+    <a href="#lifecycle" data-tab="lifecycle" class="rail-item" onclick="show('lifecycle');return false" title="Outbound">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+      <span>Outbound</span></a>
   </div>
-  <div id="rel_wrap" style="position:relative;flex:none;margin-top:.5rem"></div>
-</div>
-<div class="tabs">
-  <button class="active" data-tab="ppc" onclick="show('ppc')">PPC</button>
-  <button data-tab="abm" onclick="show('abm')">ABM</button>
-  <button data-tab="cro" onclick="show('cro')">CRO score</button>
-  <button data-tab="compare" onclick="show('compare')">Compare</button>
-  <button data-tab="analytics" onclick="show('analytics')">Analytics import</button>
-  <button data-tab="gsc" onclick="show('gsc')">Search Console</button>
-  <button data-tab="creative" onclick="show('creative')">Creative score</button>
-  <button data-tab="lifecycle" onclick="show('lifecycle')">Outbound</button>
-  <button data-tab="ltvcac" onclick="show('ltvcac')">LTV/CAC</button>
+  <div class="rail-foot"><div id="rel_wrap" style="position:relative"></div></div>
+</nav>
+
+<main class="content">
+<div class="content-head">
+  <h1 id="page_title">PPC</h1>
+  <p class="subtitle" id="page_sub">Spend, score, and ship — all in one place</p>
 </div>
 
 <div id="ppc" class="panel active">
@@ -348,61 +400,37 @@ window.addEventListener('DOMContentLoaded', gateCheck);
   <pre id="lc_out"></pre>
 </div>
 
-<div id="ltvcac" class="panel">
-  <h3 style="margin-top:0;color:var(--primary);font-size:1.3rem;font-weight:700">LTV:CAC Ratio Calculator</h3>
-  <p style="color:var(--text-muted);font-size:.9rem;margin:.25rem 0 1.5rem">Inspired by <a href="https://portermetrics.com/en/free-tools/calculators/free-cacltv-ratio/" target="_blank" style="color:var(--primary)">Porter Metrics</a> · formula <a href="https://www.wallstreetprep.com/knowledge/ltv-cac-ratio/" target="_blank" style="color:var(--primary)">Wall Street Prep</a></p>
 
-  <div style="background:var(--accent);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1.5rem;margin-bottom:1rem">
-    <div style="display:flex;gap:.5rem;margin-bottom:1rem">
-      <button type="button" id="lt_mode_simple" onclick="ltMode('simple')" style="flex:1;background:var(--primary);color:#fff;border:1px solid var(--primary);padding:.6rem;border-radius:var(--radius-sm);cursor:pointer;font-weight:600;font-family:'Figtree',sans-serif">Simple (2 inputs)</button>
-      <button type="button" id="lt_mode_full" onclick="ltMode('full')" style="flex:1;background:transparent;color:var(--text-muted);border:1px solid var(--border);padding:.6rem;border-radius:var(--radius-sm);cursor:pointer;font-weight:600;font-family:'Figtree',sans-serif">Calculate LTV from inputs</button>
-    </div>
-
-    <div id="lt_simple_block">
-      <div class="row">
-        <div>
-          <label style="font-size:.9rem">Customer Acquisition Cost (CAC) $</label>
-          <input id="lt_cac_simple" type="number" value="200" style="font-size:1.1rem">
-          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.25rem">Total cost to acquire one new customer</div>
-        </div>
-        <div>
-          <label style="font-size:.9rem">Customer Lifetime Value (LTV) $</label>
-          <input id="lt_ltv_simple" type="number" value="800" style="font-size:1.1rem">
-          <div style="font-size:.72rem;color:var(--text-muted);margin-top:.25rem">Total revenue from one customer over their lifetime</div>
-        </div>
-      </div>
-    </div>
-
-    <div id="lt_full_block" style="display:none">
-      <div class="row">
-        <div><label>CAC ($)</label><input id="lt_cac" type="number" value="200"></div>
-        <div><label>Monthly ARPU ($)</label><input id="lt_arpu" type="number" value="50"></div>
-        <div><label>Monthly churn (0.05 = 5%)</label><input id="lt_churn" type="number" step="0.01" value="0.05"></div>
-        <div><label>Gross margin (0.80 = 80%)</label><input id="lt_gm" type="number" step="0.01" value="0.80"></div>
-        <div><label>Trial → paid rate (optional)</label><input id="lt_t2p" type="number" step="0.01" value="0.15"></div>
-        <div><label>Expansion rate (optional)</label><input id="lt_exp" type="number" step="0.01" value="0"></div>
-        <div><label>Referral rate (optional)</label><input id="lt_ref" type="number" step="0.01" value="0"></div>
-        <div><label>Activation rate (info only)</label><input id="lt_act" type="number" step="0.01" value="0.40"></div>
-      </div>
-    </div>
-  </div>
-
-  <button class="go" onclick="run('ltvcac')" style="width:100%;font-size:1rem;padding:.8rem">Calculate Ratio</button>
-  <pre id="lt_out"></pre>
+</main>
 </div>
 
 <script>
-const TABS = ['ppc','abm','cro','compare','analytics','gsc','creative','lifecycle','ltvcac'];
+const PAGE_SUBS = {
+  ppc: 'Forecast a full funnel from a budget.',
+  abm: 'LinkedIn ABM forecast on ZenABM 2026 data.',
+  cro: 'Score a landing page against the rubric, with fixes.',
+  compare: 'Your page against a competitor, head to head.',
+  analytics: 'Read a GA4 export and match pages to URLs.',
+  gsc: 'Filter Search Console queries worth acting on.',
+  creative: 'Score ad copy for the channel you are running.',
+  lifecycle: 'Score one cold email and rewrite it.',
+};
+
+const TABS = ['ppc','abm','cro','compare','analytics','gsc','creative','lifecycle'];
 
 // Panels keep their results and inputs across a switch, so coming back to a
 // tab shows what was left there. Clearing is explicit, via Clear result.
 function selectTab(t){
   if(!TABS.includes(t)) t = TABS[0];
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.rail-item').forEach(b=>b.classList.remove('active'));
   document.getElementById(t).classList.add('active');
-  const btn = document.querySelector(`.tabs button[data-tab="${t}"]`);
+  const btn = document.querySelector(`.rail a[data-tab="${t}"]`);
   if(btn) btn.classList.add('active');
+  const title = document.getElementById('page_title');
+  const sub = document.getElementById('page_sub');
+  if(btn && title) title.textContent = btn.getAttribute('title');
+  if(sub) sub.textContent = PAGE_SUBS[t] || '';
   if(t==='analytics') initAnalytics();
   if(t==='gsc') initGsc();
 }

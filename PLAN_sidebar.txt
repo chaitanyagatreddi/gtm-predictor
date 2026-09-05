@@ -1,0 +1,107 @@
+PLAN — sidebar shell, borrowed from VaultSignal
+===============================================
+Left rail for tools, main area for the run. No top bar, no global search.
+
+WHY
+---
+The tab bar is at nine items and wraps to two rows, and it gets worse with
+every tool added. Results are also buried below the form: after a run you
+scroll past the inputs to read what you asked for.
+
+TOOLS AFTER THIS BUILD - EIGHT
+------------------------------
+PPC, ABM, CRO score, Compare, Analytics import, Search Console,
+Creative score, Outbound.
+
+LTV/CAC is removed from the UI. Its endpoints, /lifecycle/ltv-cac and
+/lifecycle/ltv-cac-simple, stay in the backend untouched, so restoring the
+tab is one line. Nothing else calls them.
+
+WHAT IS BORROWED (src/global-components/DrawerWrapper.tsx and
+src/pages/components/DashBoardItem.tsx)
+--------------------------------------------------------------------
+- Fixed 15rem rail, full height, sticky, dark ground, white text.
+- Product name at the top, then a vertical nav.
+- Each item: icon plus label, rounded, px-3 py-2, gap 12px.
+- Three states: active is a solid fill, hover the same colour at 35%,
+  otherwise transparent.
+
+Rebuilt in vanilla. VaultSignal is Vite, React, Tailwind and react-router;
+this repo is one HTML file with no build step, so that code is a spec to
+match, not something to import.
+
+COLOUR - STILL NEEDS A DECISION
+-------------------------------
+A: this app's palette. Dark navy rail, active in --primary #1929D6.
+B: VaultSignal's. Rail #01065e, active #007aff.
+A is the default, since the loader and gate were asked to use this app's
+blue rather than a borrowed one.
+
+LAYOUT
+------
+Two columns: rail, then content.
+
+Inside content, a form column and an output area. With LTV/CAC gone every
+form is short except the Outbound email body, which takes the full form
+column width rather than being squeezed into a narrow one.
+
+The output area is the main event: it takes the full width available and is
+what the user looks at after a run. The form stays visible above it; it does
+not collapse, because a collapsing form hides the inputs someone is about to
+adjust for a second run, and every one of these tools is used by tweaking
+and re-running.
+
+STRUCTURE
+---------
+- .tabs becomes <nav class="rail">; the panels themselves are untouched.
+- show(), selectTab(), the hash and the history behaviour stay exactly as
+  they are. Only the clicked element changes.
+- selectTab's active-state selector moves from .tabs button[data-tab] to
+  .rail a[data-tab].
+- TABS drops 'ltvcac'; the panel markup is removed with it.
+- The release notes bell moves into the rail footer, since the header row it
+  sits in belongs to the content column.
+
+ICONS
+-----
+Eight inline SVGs, 18px, currentColor, drawn in this file. No icon library:
+a CDN font or sprite is another blocking request for eight glyphs.
+
+RESPONSIVE
+----------
+Under 900px the rail collapses to a 4rem icon-only strip, label kept as a
+title attribute. Not a hamburger drawer: that needs an overlay, focus
+trapping and an escape path, which is a bigger build than this warrants.
+
+The page still has no viewport meta tag, so a phone renders at 980px and
+zooms out. Until that is added no responsive rule can be verified on a real
+device. It is one line and changes mobile rendering everywhere, so it stays
+a separate decision.
+
+FAILURE CASES / PRE-MORTEM
+--------------------------
+- Missing the selectTab selector rename leaves every rail item looking
+  inactive while the panels still switch correctly.
+- The rail is sticky and full height; with a short panel the page cannot
+  scroll, so the content column keeps its own min-height.
+- Eight items plus a footer may overflow a short window; the nav scrolls
+  internally rather than pushing the footer off-screen.
+- The gate overlay is fixed at z-index 9999 and must still cover the rail.
+- Removing the ltvcac panel while leaving 'ltvcac' in TABS makes
+  #ltvcac resolve to a missing element; both change together.
+- A stale #ltvcac hash in someone's history must fall back to the first
+  tool rather than render blank. currentTab already does this.
+
+VERIFICATION
+------------
+- node --check on the inline script.
+- Every item switches its panel, sets the hash, and Back returns to the
+  previous tool.
+- Exactly one item shows active at a time.
+- #ltvcac in the URL falls back rather than blanking.
+- The release notes bell still opens and clears its dot from the rail.
+- No horizontal overflow at 900px or at the collapsed width.
+
+FILES TOUCHED
+-------------
+index.html only. No backend change.
