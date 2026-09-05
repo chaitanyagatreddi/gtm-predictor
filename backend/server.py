@@ -1,10 +1,11 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
+from urllib.parse import quote
 
 load_dotenv()
 
@@ -13,6 +14,7 @@ from cro import score_url, score_content
 from compare import compare_pages
 from analytics_import import parse_export, detect_source, match_to_page
 from search_console import parse_gsc
+import google_oauth as goauth
 from creative import score_creative
 from lifecycle import score_sequence, ltv_cac
 
@@ -120,6 +122,95 @@ def analytics_import(r: AnalyticsImportReq):
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+def _redirect_uri(request) -> str:
+    """Must match a URI registered on the OAuth client exactly. Localhost and
+    production are registered; preview deployments cannot be, since their
+    hostnames are generated per deployment."""
+    base = str(request.base_url).rstrip("/")
+    return f"{base}/oauth/google/callback"
+
+
+@app.get("/oauth/google/start")
+def oauth_start(request: Request):
+    try:
+        return RedirectResponse(goauth.auth_url(_redirect_uri(request)))
+    except goauth.OAuthError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/oauth/google/callback")
+def oauth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    if error:
+        # Denying consent is a choice, not a fault.
+        return RedirectResponse("/?gsc_error=" + quote("You did not grant access to Search Console."))
+    try:
+        goauth.check_state(state)
+        refresh = goauth.exchange_code(code, _redirect_uri(request))
+    except goauth.OAuthError as e:
+        return RedirectResponse("/?gsc_error=" + quote(str(e)))
+
+    resp = RedirectResponse("/?gsc_connected=1")
+    resp.set_cookie(
+        goauth.COOKIE_NAME, goauth.seal_refresh_token(refresh),
+        max_age=60 * 60 * 24 * 180, httponly=True, samesite="lax",
+        secure=request.url.scheme == "https",
+    )
+    return resp
+
+
+@app.post("/oauth/google/disconnect")
+def oauth_disconnect():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(goauth.COOKIE_NAME)
+    return resp
+
+
+@app.get("/gsc/status")
+def gsc_status(request: Request):
+    # The credentials exist in production before the flow is offered publicly.
+    # Until the landing page carries a privacy policy the app stays in Testing,
+    # where anyone outside the test-user list hits Google's "access blocked"
+    # screen, so the button is announced rather than offered.
+    enabled = (os.getenv("GSC_CONNECT_ENABLED") or "").strip() == "1"
+    return {"configured": goauth.configured(),
+            "enabled": enabled and goauth.configured(),
+            "connected": bool(request.cookies.get(goauth.COOKIE_NAME))}
+
+
+def _token_from(request):
+    cookie = request.cookies.get(goauth.COOKIE_NAME)
+    if not cookie:
+        raise HTTPException(401, "Not connected to Search Console.")
+    try:
+        return goauth.access_token(goauth.open_refresh_token(cookie))
+    except goauth.OAuthError as e:
+        raise HTTPException(401, str(e))
+
+
+@app.get("/gsc/sites")
+def gsc_sites(request: Request):
+    try:
+        return {"sites": goauth.list_sites(_token_from(request))}
+    except goauth.OAuthError as e:
+        raise HTTPException(400, str(e))
+
+
+class GscQueryReq(BaseModel):
+    site_url: str
+    days: int = 28
+    dimension: str = "query"
+
+
+@app.post("/gsc/query")
+def gsc_query(r: GscQueryReq, request: Request):
+    if r.dimension not in {"query", "page"}:
+        raise HTTPException(400, "Dimension must be query or page.")
+    try:
+        return goauth.query_search_analytics(_token_from(request), r.site_url, r.days, r.dimension)
+    except goauth.OAuthError as e:
+        raise HTTPException(400, str(e))
 
 
 class GscImportReq(BaseModel):

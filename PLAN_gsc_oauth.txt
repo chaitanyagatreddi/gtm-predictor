@@ -1,0 +1,110 @@
+PLAN — Connect Search Console (OAuth)
+=====================================
+Adds a Connect button beside the existing CSV upload. The upload stays: it
+needs no Google account and works for anyone auditing a site they do not own.
+
+WHAT THE CONSOLE CHECK SETTLED
+------------------------------
+webmasters.readonly is classified NON-SENSITIVE. Confirmed on the project's
+Data access page: it sits under "Your non-sensitive scopes", with Sensitive
+and Restricted both empty. That removes the verification review, the 100-user
+cap, the 7-day refresh token expiry and the unverified-app warning, once the
+app is published to production.
+
+Publishing to production additionally requires a privacy policy URL. Until
+that page exists the app stays in Testing, where the cap and the 7-day expiry
+do apply. Test users are already added.
+
+Project: gtm-predictor (feisty-flames-471812-p0). Search Console API enabled.
+GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set in Vercel production.
+
+FLOW
+----
+1. GET /oauth/google/start
+   Redirects to Google with response_type=code, access_type=offline,
+   prompt=consent, scope=webmasters.readonly, and a signed state parameter.
+2. GET /oauth/google/callback
+   Verifies state, exchanges the code for tokens, writes the refresh token to
+   an httpOnly cookie, redirects back to /#gsc.
+3. POST /gsc/sites
+   Lists the properties this account can read, so the user picks one.
+4. POST /gsc/query
+   Calls searchanalytics.query for the chosen property and date range, and
+   returns rows in the same shape parse_gsc already produces, so the existing
+   table, filters, sorting and selection work unchanged.
+
+TOKEN STORAGE - COOKIE, NOT A DATABASE
+--------------------------------------
+The refresh token goes in an httpOnly, Secure, SameSite=Lax cookie. This app
+has no database, and adding one for a single string is not worth it.
+
+What that costs: the connection is per-browser. Connecting on a laptop does
+not carry to a phone, and clearing cookies disconnects. Both are acceptable
+for beta and are stated in the UI rather than left to be discovered.
+
+The cookie is signed with an existing server secret so it cannot be forged.
+Access tokens are never stored; they are fetched per request and discarded.
+
+STATE AND CSRF
+--------------
+The state parameter is an HMAC of a random nonce plus a timestamp, signed
+server-side and checked on return. Without it, an attacker can complete an
+OAuth flow into someone else's session. It expires after 10 minutes.
+
+FRONTEND
+--------
+The Search Console panel gains two states.
+
+Not connected: the CSV drop zone as today, plus a "Connect Search Console"
+button. The label now tells the truth, because the flow exists.
+
+Connected: a property picker, a date range (28 days, 3 months, 16 months, the
+last being Search Console's own limit), a Fetch button, and a Disconnect
+link. Below it, the same table as the CSV path.
+
+Both paths converge on renderGscTable, so filters, sorting, selection and the
+warnings block are shared.
+
+FAILURE CASES / PRE-MORTEM
+--------------------------
+- The user denies consent. Google returns error=access_denied, which must
+  render as a plain message, not a stack trace.
+- Testing mode expires the refresh token after 7 days. The API answers with
+  invalid_grant; that must be detected specifically and shown as "reconnect",
+  not as a generic failure. This is the single likeliest support question.
+- The account has no Search Console properties. That is a real state, not an
+  error; say so and leave the upload path available.
+- A property with no data for the range returns zero rows, which is not a
+  failure either.
+- searchanalytics.query caps at 25,000 rows per request and needs paging.
+  v1 requests the top 1,000 by clicks and says so, rather than silently
+  truncating.
+- The redirect URI must match the registered one exactly, including scheme
+  and trailing path. Localhost and production are both registered; anything
+  else, including preview deployments, will fail. Preview URLs are generated
+  per deployment and cannot be pre-registered, so Connect will not work on a
+  Vercel preview. Test it locally and in production.
+- The cookie is host-scoped, so a connection made on the production domain
+  does not apply on localhost. Expected, worth knowing while testing.
+- Clock skew breaks state expiry checks; the window is 10 minutes, not 30
+  seconds, for that reason.
+
+NOT IN THIS BUILD
+-----------------
+Publishing to production, which needs the privacy page. Multi-device
+connections. Scheduled refreshes. Writing anything back to Google: the scope
+is read-only and stays that way.
+
+VERIFICATION
+------------
+- Local: connect end to end on localhost:8765 with a test user account, fetch
+  a real property, confirm rows render in the existing table.
+- Denied consent, invalid state and a forged cookie each produce a clean
+  message.
+- The CSV path still works untouched.
+- node --check on the inline script.
+
+FILES TOUCHED
+-------------
+backend/google_oauth.py (new), backend/search_console.py, backend/server.py,
+index.html, requirements.txt, README.md.

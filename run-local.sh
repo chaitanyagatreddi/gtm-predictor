@@ -11,4 +11,8 @@ for v in OPENAI_API_KEY ZENABM_TOKEN GTMP; do
   [ "${!v:-}" = "[SENSITIVE]" ] && unset "$v" || true
 done
 [ -f ~/.claude/secrets.zsh ] && source ~/.claude/secrets.zsh
+# The Connect flow is enabled locally so it can be tested before it is
+# offered publicly.
+export GSC_CONNECT_ENABLED=1
+
 exec .venv/bin/uvicorn server:app --reload --port 8765 --app-dir backend

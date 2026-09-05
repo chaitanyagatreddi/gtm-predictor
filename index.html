@@ -359,6 +359,8 @@ window.addEventListener('DOMContentLoaded', gateCheck);
   </div>
 
   <button class="go" onclick="runGsc()">Read file</button>
+
+  <div id="gsc_connect" style="margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)"></div>
   <pre id="gsc_out"></pre>
 </div>
 
@@ -432,7 +434,7 @@ function selectTab(t){
   if(btn && title) title.textContent = btn.getAttribute('title');
   if(sub) sub.textContent = PAGE_SUBS[t] || '';
   if(t==='analytics') initAnalytics();
-  if(t==='gsc') initGsc();
+  if(t==='gsc'){ initGsc(); gscInitConnect(); }
 }
 function show(t){
   // Tabs live in history, so Back returns to the previous tab instead of
@@ -1506,6 +1508,134 @@ function initGsc(){
     if(el) el.addEventListener('input', () => { if(gscRows) renderGscTable(); });
   });
 }
+
+
+// Search Console over OAuth. The CSV path stays: it needs no Google account,
+// and it works for auditing a site you do not own.
+let gscSites = null, gscSite = '';
+
+async function gscInitConnect(){
+  const box = document.getElementById('gsc_connect');
+  if(!box) return;
+  let st;
+  try { st = await (await fetch('/gsc/status')).json(); }
+  catch(e){ box.innerHTML = ''; return; }
+
+  if(!st.enabled){
+    box.innerHTML = `<div style="font-size:.88rem;color:var(--text-muted);margin-bottom:.6rem">
+        Or pull the data straight from your account, without exporting anything.</div>
+      <button disabled style="padding:.7rem 1.2rem;border:1px solid var(--border);border-radius:var(--radius-sm);
+        background:transparent;color:var(--text-muted);font-family:'Figtree',sans-serif;font-weight:600;
+        font-size:.9rem;cursor:not-allowed;opacity:.65">Connect Search Console \u00b7 soon</button>`;
+    return;
+  }
+
+  if(!st.connected){
+    box.innerHTML = `<div style="font-size:.88rem;color:var(--text-muted);margin-bottom:.6rem">
+        Or pull the data straight from your account \u2014 read-only, and you can disconnect at any time.</div>
+      <a class="go" href="/oauth/google/start" style="display:inline-block;text-decoration:none">Connect Search Console</a>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-top:.5rem">
+        The connection is stored in this browser only, so it will not carry to another device.</div>`;
+    return;
+  }
+  await gscRenderConnected();
+}
+
+async function gscRenderConnected(){
+  const box = document.getElementById('gsc_connect');
+  box.innerHTML = '<div style="font-size:.88rem;color:var(--text-muted)">Loading your properties\u2026</div>';
+  let data;
+  try { data = await (await fetch('/gsc/sites')).json(); }
+  catch(e){ data = {detail:'Could not reach the server.'}; }
+
+  if(data.detail){
+    box.innerHTML = `<div style="border-left:3px solid #f59e0b;padding:.15rem 0 .15rem .8rem;font-size:.88rem">
+      ${escapeHtml(data.detail)}
+      <div style="margin-top:.5rem"><a class="go" href="/oauth/google/start" style="display:inline-block;text-decoration:none">Connect again</a></div></div>`;
+    return;
+  }
+
+  gscSites = data.sites || [];
+  if(!gscSites.length){
+    // A real state, not an error.
+    box.innerHTML = `<div style="font-size:.88rem;color:var(--text-muted)">Connected, but this Google account has no
+      verified Search Console properties. Use the upload above, or verify a site in Search Console first.
+      <div style="margin-top:.5rem"><button class="gsc-chip" onclick="gscDisconnect()">Disconnect</button></div></div>`;
+    return;
+  }
+
+  gscSite = gscSite || gscSites[0].url;
+  box.innerHTML = `
+    <div class="row">
+      <div><label>Property</label>
+        <select id="gsc_site">${gscSites.map(x =>
+          `<option value="${escapeHtml(x.url)}"${x.url===gscSite?' selected':''}>${escapeHtml(x.url)}</option>`).join('')}</select></div>
+      <div><label>Range</label>
+        <select id="gsc_days">
+          <option value="28">Last 28 days</option>
+          <option value="90">Last 3 months</option>
+          <option value="480">Last 16 months</option>
+        </select></div>
+    </div>
+    <div class="row">
+      <div><label>Group by</label>
+        <select id="gsc_dim"><option value="query">Query</option><option value="page">Page</option></select></div>
+      <div style="display:flex;align-items:flex-end;gap:.5rem">
+        <button class="go" style="margin-top:0" onclick="gscFetch()">Fetch from Search Console</button>
+        <button class="gsc-chip" style="height:2.6rem" onclick="gscDisconnect()">Disconnect</button>
+      </div>
+    </div>`;
+}
+
+function escapeHtml(t){
+  return String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function gscDisconnect(){
+  await fetch('/oauth/google/disconnect', {method:'POST'});
+  gscSites = null; gscSite = '';
+  await gscInitConnect();
+}
+
+async function gscFetch(){
+  const outEl = document.getElementById('gsc_out');
+  const site = document.getElementById('gsc_site').value;
+  const days = Number(document.getElementById('gsc_days').value);
+  const dimension = document.getElementById('gsc_dim').value;
+  gscSite = site;
+
+  outEl.style.display='none';
+  let host = outEl.nextElementSibling;
+  if(!host || !host.classList.contains('rendered')){
+    host = document.createElement('div'); host.className = 'rendered';
+    outEl.parentNode.insertBefore(host, outEl.nextSibling);
+  }
+  const stop = startLoader(host, ['Asking Search Console\u2026','Reading your queries\u2026']);
+  const data = await post('/gsc/query', {site_url:site, days, dimension});
+  await stop();
+  host.innerHTML = '';
+
+  if(data && (data.__error || data.detail)){
+    showError(outEl, data.__error || data.detail);
+    // An expired connection is the likeliest cause; offer the fix in place.
+    if((data.detail||'').includes('expired')) await gscInitConnect();
+    return;
+  }
+  gscRows = data.rows; gscMeta = data; gscSelected = new Set();
+  renderGscTable();
+}
+
+// Surface the result of a redirect back from Google.
+function gscHandleRedirect(){
+  const params = new URLSearchParams(location.search);
+  const err = params.get('gsc_error');
+  const ok = params.get('gsc_connected');
+  if(!err && !ok) return;
+  history.replaceState({}, '', location.pathname + '#gsc');
+  selectTab('gsc');
+  if(err) showError(document.getElementById('gsc_out'), err);
+}
+document.addEventListener('DOMContentLoaded', gscHandleRedirect);
 
 function showGscVerdict(text){
   const head = (text || '').slice(0, 8000).toLowerCase();
