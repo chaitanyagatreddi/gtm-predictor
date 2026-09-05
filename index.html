@@ -342,10 +342,10 @@ window.addEventListener('DOMContentLoaded', gateCheck);
 </div>
 
 <div id="gsc" class="panel">
-  <label>Search Console export</label>
+  <label>Upload your Search Console export</label>
   <div id="gsc_drop" style="border:2px dashed var(--accent);border-radius:var(--radius);padding:2rem 1rem;text-align:center;cursor:pointer;transition:all .15s;background:var(--accent)">
     <div style="font-weight:600;font-size:.95rem" id="gsc_droptext">Drop your CSV here, or click to choose</div>
-    <div style="font-size:.8rem;color:var(--text-muted);margin-top:.3rem">Queries.csv or Pages.csv · 5MB max</div>
+    <div style="font-size:.8rem;color:var(--text-muted);margin-top:.3rem">Performance → Export → CSV, then unzip and use Queries.csv or Pages.csv · 5MB max</div>
     <input type="file" id="gsc_file" accept=".csv,text/csv" style="display:none">
   </div>
 
@@ -411,7 +411,7 @@ const PAGE_SUBS = {
   cro: 'Score a landing page against the rubric, with fixes.',
   compare: 'Your page against a competitor, head to head.',
   analytics: 'Read a GA4 export and match pages to URLs.',
-  gsc: 'Filter Search Console queries worth acting on.',
+  gsc: 'Find the queries you already rank for, and the ones close enough to win.',
   creative: 'Score ad copy for the channel you are running.',
   lifecycle: 'Score one cold email and rewrite it.',
 };
