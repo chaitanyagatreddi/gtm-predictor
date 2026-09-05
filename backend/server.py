@@ -12,6 +12,7 @@ from predictor import predict_ppc, predict_abm
 from cro import score_url, score_content
 from compare import compare_pages
 from analytics_import import parse_export, detect_source, match_to_page
+from search_console import parse_gsc
 from creative import score_creative
 from lifecycle import score_sequence, ltv_cac
 
@@ -115,6 +116,22 @@ def analytics_import(r: AnalyticsImportReq):
         if r.match_url:
             data["matched_page"] = match_to_page(data["rows"], r.match_url)
         return data
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+class GscImportReq(BaseModel):
+    content: str
+
+
+@app.post("/gsc/import")
+def gsc_import(r: GscImportReq):
+    if len(r.content.encode("utf-8")) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, "File too large. Narrow the date range and export again (5MB max).")
+    try:
+        return parse_gsc(r.content)
     except ValueError as e:
         raise HTTPException(400, str(e))
     except Exception as e:

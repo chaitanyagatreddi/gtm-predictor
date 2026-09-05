@@ -1,0 +1,102 @@
+PLAN — Google Search Console import (CSV, v1)
+=============================================
+Scope for today: the import and the filter table only. The programmatic regex
+layer and outline generation are a separate build, not in this plan.
+
+WHY CSV AND NOT THE API
+-----------------------
+The Search Console API needs a Google Cloud project, an OAuth consent screen,
+per-user token storage and a refresh flow. Two unknowns to verify before that
+route is worth starting: whether the webmasters.readonly scope is classified
+sensitive (which forces app verification, weeks not days) and whether it hits
+the same domain requirement that parked the Google sign-in. CSV needs none of
+it and proves the join is useful first.
+
+WHAT GSC EXPORTS
+----------------
+Performance report > Export > CSV gives a ZIP with several sheets. The one
+that matters is Queries.csv: Top queries, Clicks, Impressions, CTR, Position.
+Pages.csv has the same metrics keyed on page URL. Users can also export a
+single sheet directly as CSV.
+
+The parser must handle both shapes and say which it got, exactly as the GA4
+importer does with path-keyed versus title-keyed exports.
+
+BACKEND — backend/search_console.py (new)
+-----------------------------------------
+parse_gsc(content) -> {
+  "source": "gsc",
+  "key_kind": "query" | "page",
+  "row_count": int,
+  "columns_found": [...],
+  "warnings": [...],
+  "rows": [{"key": str, "clicks": float, "impressions": float,
+            "ctr": float, "position": float}, ...],
+}
+
+- Header detection by substring, not exact match: GSC localises headers and
+  changes wording between exports.
+- CTR arrives as "3.4%" and position as "12.7"; reuse the GA4 _to_number,
+  which already strips % and commas.
+- A CTR column read as 3.4 rather than 0.034 must be normalised, and the
+  chosen interpretation stated in warnings.
+- Rows with zero impressions are kept, not dropped: they are real.
+
+server.py gains POST /gsc/import, mirroring /analytics/import including the
+5MB guard and the 400/500 split.
+
+FRONTEND — a new tab
+--------------------
+Same drop zone, source pills and verdict-on-drop pattern as Analytics import,
+reusing showCsvVerdict's shape with GSC's own header hints.
+
+Table: query or page, clicks, impressions, CTR, position. Sortable by any
+column. Filters above it:
+  - text contains (plain substring, not regex, in v1)
+  - min impressions
+  - position range (e.g. 5 to 20, the striking distance band)
+Filter state is client-side over the parsed rows; no re-upload, no re-request.
+
+Counts update live: "312 of 4,180 queries".
+
+SELECTION, NOT REGEX
+--------------------
+The programmatic regex layer is dropped. A user sorting by impressions and
+picking the top rows reaches the same set without learning a syntax, and the
+ones who would write a regex are a small minority of a small minority.
+
+Instead: sortable columns, the filters above, and a checkbox per row with a
+"select top 20" shortcut. The selected set is what feeds outline generation
+later, so it stays addressable in one place.
+
+NOT IN THIS BUILD
+-----------------
+Outline generation from the selected queries.
+
+FAILURE CASES / PRE-MORTEM
+--------------------------
+- A user uploads the ZIP rather than a sheet. Detect the PK zip signature and
+  say which file inside to upload.
+- A user uploads Pages.csv expecting queries, or the reverse. Report key_kind
+  plainly rather than silently keying on the wrong column.
+- Localised headers defeat substring matching. Warn, never hard fail, and
+  show what columns were found.
+- CTR as percent versus fraction is the likeliest silent error. State the
+  interpretation in warnings and show a worked example in the UI.
+- Very large exports: GSC caps at 1,000 rows in the UI export but the bulk
+  export is far larger. The 5MB guard already covers this; the table must
+  page or virtualise rather than render 50,000 rows at once. v1 renders the
+  first 100 and says how many matched.
+- Position is an average, and averaging averages across a filter is wrong.
+  Show position per row only; do not compute a filtered mean.
+
+VERIFICATION
+------------
+- Parser unit-checked against a hand-built fixture of both shapes, including
+  a percent CTR, a comma thousands separator and a zero-impression row.
+- node --check on the inline script.
+- Live check on the staging preview before merging to main.
+
+FILES TOUCHED
+-------------
+backend/search_console.py (new), backend/server.py, index.html, README.md.

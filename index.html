@@ -40,6 +40,9 @@ textarea{min-height:100px;line-height:1.5}
 button.go{margin-top:1.25rem;background:var(--primary);color:white;border:none;padding:.85rem 1.5rem;border-radius:var(--radius-sm);cursor:pointer;font-family:'Figtree',sans-serif;font-weight:700;font-size:.95rem;letter-spacing:-0.005em;transition:background .15s;box-shadow:0 4px 12px rgba(25,41,214,.2)}
 button.go:hover{background:var(--primary-hover)}
 
+.gsc-chip{padding:.4rem .8rem;border:1px solid var(--border);border-radius:999px;background:transparent;
+  color:var(--text-muted);font-family:'Figtree',sans-serif;font-size:.8rem;font-weight:600;cursor:pointer}
+.gsc-chip:hover{border-color:var(--primary);color:var(--primary)}
 pre{background:var(--surface);padding:1rem;border-radius:var(--radius-sm);overflow-x:auto;font-size:.82rem;margin-top:1rem;border:1px solid var(--border);color:var(--text);font-family:'SF Mono','Monaco',monospace}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
 
@@ -175,14 +178,20 @@ document.getElementById('gate_email')?.addEventListener('keydown', e => { if(e.k
 window.addEventListener('DOMContentLoaded', gateCheck);
 </script>
 
-<h1>GTM Predictor</h1>
-<p class="subtitle">Spend, score, and ship — all in one place</p>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
+  <div>
+    <h1>GTM Predictor</h1>
+    <p class="subtitle">Spend, score, and ship — all in one place</p>
+  </div>
+  <div id="rel_wrap" style="position:relative;flex:none;margin-top:.5rem"></div>
+</div>
 <div class="tabs">
   <button class="active" data-tab="ppc" onclick="show('ppc')">PPC</button>
   <button data-tab="abm" onclick="show('abm')">ABM</button>
   <button data-tab="cro" onclick="show('cro')">CRO score</button>
   <button data-tab="compare" onclick="show('compare')">Compare</button>
   <button data-tab="analytics" onclick="show('analytics')">Analytics import</button>
+  <button data-tab="gsc" onclick="show('gsc')">Search Console</button>
   <button data-tab="creative" onclick="show('creative')">Creative score</button>
   <button data-tab="lifecycle" onclick="show('lifecycle')">Outbound</button>
   <button data-tab="ltvcac" onclick="show('ltvcac')">LTV/CAC</button>
@@ -280,6 +289,27 @@ window.addEventListener('DOMContentLoaded', gateCheck);
   <pre id="an_out"></pre>
 </div>
 
+<div id="gsc" class="panel">
+  <label>Search Console export</label>
+  <div id="gsc_drop" style="border:2px dashed var(--accent);border-radius:var(--radius);padding:2rem 1rem;text-align:center;cursor:pointer;transition:all .15s;background:var(--accent)">
+    <div style="font-weight:600;font-size:.95rem" id="gsc_droptext">Drop your CSV here, or click to choose</div>
+    <div style="font-size:.8rem;color:var(--text-muted);margin-top:.3rem">Queries.csv or Pages.csv · 5MB max</div>
+    <input type="file" id="gsc_file" accept=".csv,text/csv" style="display:none">
+  </div>
+
+  <div class="row" style="margin-top:1.2rem">
+    <div><label>Contains</label><input id="gsc_q" placeholder="e.g. pricing"></div>
+    <div><label>Min impressions</label><input id="gsc_minimp" type="number" value="0"></div>
+  </div>
+  <div class="row">
+    <div><label>Position from</label><input id="gsc_posmin" type="number" step="0.1" placeholder="any"></div>
+    <div><label>Position to</label><input id="gsc_posmax" type="number" step="0.1" placeholder="any"></div>
+  </div>
+
+  <button class="go" onclick="runGsc()">Read file</button>
+  <pre id="gsc_out"></pre>
+</div>
+
 <div id="compare" class="panel">
   <label>Your landing page URL</label><input id="cmp_url" placeholder="https://yourpage.com">
   <label>Competitor URL</label><input id="cmp_rival" placeholder="https://competitor.com">
@@ -362,7 +392,7 @@ window.addEventListener('DOMContentLoaded', gateCheck);
 </div>
 
 <script>
-const TABS = ['ppc','abm','cro','compare','analytics','creative','lifecycle','ltvcac'];
+const TABS = ['ppc','abm','cro','compare','analytics','gsc','creative','lifecycle','ltvcac'];
 
 // Panels keep their results and inputs across a switch, so coming back to a
 // tab shows what was left there. Clearing is explicit, via Clear result.
@@ -374,6 +404,7 @@ function selectTab(t){
   const btn = document.querySelector(`.tabs button[data-tab="${t}"]`);
   if(btn) btn.classList.add('active');
   if(t==='analytics') initAnalytics();
+  if(t==='gsc') initGsc();
 }
 function show(t){
   // Tabs live in history, so Back returns to the previous tab instead of
@@ -471,6 +502,7 @@ const NOTES = {
   compare: 'Your page against a competitor\u2019s, both scored on the CRO rubric, plus a head-to-head diff. Takes roughly 30-60 seconds \u2014 three model passes.',
   creative: 'Ad copy scored against the channel you pick. The image description is optional, but it changes the score.',
   lifecycle: 'One cold email, not a sequence. Open and click rates are your own assumptions and only feed the downstream math.',
+  gsc: 'Upload a Search Console Performance export to filter your queries or pages by impressions and position, then select the ones worth acting on. Search Console holds 16 months of data.',
   ltvcac: 'Simple mode needs CAC and LTV. Full mode derives LTV from ARPU, churn and gross margin, and shows the formula it used.',
 };
 function wireNotes(){
@@ -513,6 +545,8 @@ const FIELD_NOTES = {
   a_creative:'Same scale as CRO: the Creative tab\u2019s /10 score divided by 10.',
   lc_open:  'Your own assumption, not a measurement. It only feeds the reply and meeting math below.',
   lt_churn: 'A decimal, not a percentage \u2014 5% monthly churn is 0.05.',
+  gsc_file: 'Search Console \u203a Performance \u203a Export \u203a CSV. The download is a ZIP \u2014 unzip it and upload Queries.csv or Pages.csv from inside.',
+  gsc_q: 'Plain text match on the query or page, not a regular expression.',
 };
 
 function wireFieldNotes(){
@@ -561,6 +595,94 @@ function wireFieldNotes(){
   document.addEventListener('keydown', e => { if(e.key==='Escape') closeOpen(); });
 }
 document.addEventListener('DOMContentLoaded', wireFieldNotes);
+
+// Release notes. Written by hand rather than generated from commits: a commit
+// describes the code, a release note describes what changed for the person
+// using the tool. Newest first.
+const RELEASES = [
+  {date:'2026-09-05', tag:'new', title:'Export CRO results',
+   body:'Download any CRO score as Markdown or CSV \u2014 the full scorecard, every fix, and the priority order.'},
+  {date:'2026-09-05', tag:'new', title:'Compare against a competitor',
+   body:'Score your landing page and a competitor\u2019s on the same rubric, with a head-to-head diff.'},
+  {date:'2026-09-05', tag:'new', title:'Import a GA4 export',
+   body:'Drop in a Pages and screens CSV to read your page metrics, and match a page to a URL you have scored.'},
+  {date:'2026-09-05', tag:'improved', title:'URLs work without https://',
+   body:'Type signoz.io and it just works, on every tab that takes a URL.'},
+  {date:'2026-09-05', tag:'improved', title:'Every tool explains itself',
+   body:'The ! icons say what each tool needs and what it returns, including which GA4 export to pull.'},
+  {date:'2026-09-05', tag:'improved', title:'Tabs remember where you were',
+   body:'Results stay when you switch tabs, and the browser Back button returns to the previous tab instead of leaving.'},
+  {date:'2026-09-05', tag:'fixed', title:'Clearer scraping errors',
+   body:'A page behind a bot challenge now says so, rather than showing a raw HTTP error.'},
+];
+
+const SEEN_KEY = 'gtm_seen_release';
+function seenRelease(){ try { return localStorage.getItem(SEEN_KEY); } catch(e) { return null; } }
+function markReleasesSeen(){
+  try { localStorage.setItem(SEEN_KEY, RELEASES[0].date); } catch(e) { /* dot stays, which is the safe direction */ }
+}
+
+function wireReleaseNotes(){
+  const wrap = document.getElementById('rel_wrap');
+  if(!wrap || !RELEASES.length) return;
+
+  const TAGS = {
+    new:      {label:'New',      colour:'var(--primary)'},
+    improved: {label:'Improved', colour:'#f59e0b'},
+    fixed:    {label:'Fixed',    colour:'var(--text-muted)'},
+  };
+
+  const bell = document.createElement('button');
+  bell.setAttribute('aria-label', "What's new");
+  bell.innerHTML = '\u{1F514}';
+  bell.style.cssText = 'position:relative;width:2.4rem;height:2.4rem;border-radius:50%;'
+    + 'border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:1rem;'
+    + 'line-height:1;padding:0;display:flex;align-items:center;justify-content:center';
+
+  const dot = document.createElement('span');
+  dot.style.cssText = 'position:absolute;top:.35rem;right:.35rem;width:.5rem;height:.5rem;'
+    + 'border-radius:50%;background:#ef4444;display:none';
+  bell.appendChild(dot);
+
+  const panel = document.createElement('div');
+  panel.hidden = true;
+  panel.style.cssText = 'position:absolute;top:2.9rem;right:0;width:min(360px,90vw);'
+    + 'max-height:26rem;overflow-y:auto;background:var(--bg);border:1px solid var(--border);'
+    + 'border-radius:var(--radius);box-shadow:0 20px 60px rgba(25,41,214,.15);'
+    + 'padding:1rem 1.1rem;z-index:1000;text-align:left';
+
+  const esc = t => String(t==null?'':t).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  panel.innerHTML = '<div style="font-family:\'Rubik\',sans-serif;font-weight:800;font-size:1.05rem;'
+    + 'color:var(--text);margin-bottom:.9rem">What\u2019s new</div>'
+    + RELEASES.slice(0,20).map(r => {
+        const t = TAGS[r.tag] || TAGS.improved;
+        return `<div style="padding:.7rem 0;border-top:1px solid var(--accent)">
+          <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.25rem">
+            <span style="font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+                         color:${t.colour}">${t.label}</span>
+            <span style="font-size:.72rem;color:var(--text-muted)">${esc(r.date)}</span>
+          </div>
+          <div style="font-weight:700;font-size:.9rem;color:var(--text)">${esc(r.title)}</div>
+          <div style="font-size:.85rem;color:var(--text-muted);line-height:1.45;margin-top:.15rem">${esc(r.body)}</div>
+        </div>`;
+      }).join('');
+
+  const refreshDot = () => { dot.style.display = seenRelease() === RELEASES[0].date ? 'none' : 'block'; };
+  refreshDot();
+
+  bell.onclick = e => {
+    e.stopPropagation();
+    panel.hidden = !panel.hidden;
+    if(!panel.hidden){ markReleasesSeen(); refreshDot(); }
+  };
+  document.addEventListener('click', e => { if(!panel.contains(e.target)) panel.hidden = true; });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') panel.hidden = true; });
+
+  wrap.appendChild(bell);
+  wrap.appendChild(panel);
+}
+document.addEventListener('DOMContentLoaded', wireReleaseNotes);
+
 
 // CRO export. Built client-side from the result already on screen, so it costs
 // no extra API call and needs no dependency.
@@ -1316,6 +1438,176 @@ function showCsvVerdict(text){
     + ';padding:.15rem 0 .15rem .8rem;font-family:\'Figtree\',sans-serif;font-size:.88rem;'
     + 'line-height:1.5;color:var(--text)"><b style="color:' + colour + '">' + mark + '</b> '
     + v.msg + tail + '</div>';
+}
+
+
+// Search Console import. Rows are parsed once and every filter runs over them
+// in memory, so narrowing never costs a re-upload or another request.
+let gscRows = null, gscMeta = null, gscContent = '', gscSelected = new Set();
+
+function initGsc(){
+  const drop = document.getElementById('gsc_drop');
+  const input = document.getElementById('gsc_file');
+  if(!drop || !input || drop.dataset.wired) return;
+  drop.dataset.wired = '1';
+
+  const load = file => {
+    if(!file) return;
+    if(file.size > 5*1024*1024){
+      showError(document.getElementById('gsc_out'), 'That file is larger than 5MB. Narrow the date range in Search Console and export again.');
+      return;
+    }
+    const fr = new FileReader();
+    fr.onload = e => {
+      gscContent = e.target.result;
+      document.getElementById('gsc_droptext').textContent = `${file.name} \u00b7 ${(file.size/1024).toFixed(0)} KB`;
+      showGscVerdict(gscContent);
+    };
+    fr.readAsText(file);
+  };
+  drop.onclick = () => input.click();
+  input.onchange = e => load(e.target.files[0]);
+  drop.ondragover = e => { e.preventDefault(); drop.style.borderColor = 'var(--primary)'; };
+  drop.ondragleave = () => { drop.style.borderColor = 'var(--accent)'; };
+  drop.ondrop = e => { e.preventDefault(); drop.style.borderColor = 'var(--accent)'; load(e.dataTransfer.files[0]); };
+
+  ['gsc_q','gsc_minimp','gsc_posmin','gsc_posmax'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('input', () => { if(gscRows) renderGscTable(); });
+  });
+}
+
+function showGscVerdict(text){
+  const head = (text || '').slice(0, 8000).toLowerCase();
+  const hasMetric = ['clicks','impressions','ctr','position'].some(h => head.includes(h));
+  const isQuery = head.includes('quer') || head.includes('search term');
+  const isPage = head.includes('page') || head.includes('url');
+  let level, msg;
+  if(text && text.startsWith('PK')){
+    level = 'bad'; msg = 'That is the ZIP Search Console exports. Unzip it and upload Queries.csv or Pages.csv from inside.';
+  } else if(hasMetric && (isQuery || isPage)){
+    level = 'good'; msg = (isQuery ? 'Queries' : 'Pages') + ' export \u2014 good to go.';
+  } else {
+    level = 'bad'; msg = 'This does not look like a Search Console export. In Search Console: Performance \u203a Export \u203a CSV, then upload Queries.csv or Pages.csv.';
+  }
+  const colour = {good:'#10b981', bad:'#ef4444'}[level];
+  const mark = {good:'\u2713', bad:'\u2715'}[level];
+  const out = document.getElementById('gsc_out');
+  out.style.display = 'block';
+  out.innerHTML = '<div style="white-space:normal;border-left:3px solid ' + colour
+    + ';padding:.15rem 0 .15rem .8rem;font-family:\'Figtree\',sans-serif;font-size:.88rem;'
+    + 'line-height:1.5;color:var(--text)"><b style="color:' + colour + '">' + mark + '</b> ' + msg
+    + (level === 'good' ? '' : '<div style="color:var(--text-muted);margin-top:.35rem">You can still click Read file.</div>')
+    + '</div>';
+}
+
+async function runGsc(){
+  const outEl = document.getElementById('gsc_out');
+  if(!gscContent){ showError(outEl, 'Choose a Search Console CSV first.'); return; }
+  outEl.style.display='none';
+  let host = outEl.nextElementSibling;
+  if(!host || !host.classList.contains('rendered')){
+    host = document.createElement('div'); host.className = 'rendered';
+    outEl.parentNode.insertBefore(host, outEl.nextSibling);
+  }
+  const stop = startLoader(host, ['Reading your export\u2026','Parsing rows\u2026']);
+  const data = await post('/gsc/import', {content: gscContent});
+  await stop();
+  host.innerHTML = '';
+  if(data && (data.__error || data.detail)){ showError(outEl, data.__error || data.detail); return; }
+  gscRows = data.rows; gscMeta = data; gscSelected = new Set();
+  renderGscTable();
+}
+
+function gscFiltered(){
+  const q = document.getElementById('gsc_q').value.trim().toLowerCase();
+  const minImp = Number(document.getElementById('gsc_minimp').value) || 0;
+  const pMin = document.getElementById('gsc_posmin').value.trim();
+  const pMax = document.getElementById('gsc_posmax').value.trim();
+  return (gscRows||[]).filter(r => {
+    if(q && !r.key.toLowerCase().includes(q)) return false;
+    if((r.impressions||0) < minImp) return false;
+    if(pMin !== '' && (r.position == null || r.position < Number(pMin))) return false;
+    if(pMax !== '' && (r.position == null || r.position > Number(pMax))) return false;
+    return true;
+  });
+}
+
+let gscSort = {col:'impressions', dir:-1};
+function gscSortBy(col){
+  gscSort = (gscSort.col === col) ? {col, dir: -gscSort.dir} : {col, dir: -1};
+  renderGscTable();
+}
+
+function gscSelectTop(n){
+  const rows = gscFiltered().slice(0, n);
+  rows.forEach(r => gscSelected.add(r.key));
+  renderGscTable();
+}
+function gscToggle(key){
+  if(gscSelected.has(key)) gscSelected.delete(key); else gscSelected.add(key);
+  renderGscTable();
+}
+function gscClearSelection(){ gscSelected = new Set(); renderGscTable(); }
+
+function renderGscTable(){
+  const esc = t => String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const num = v => v==null ? '\u2014' : Number(v).toLocaleString('en-US');
+  const pct = v => v==null ? '\u2014' : (v*100).toFixed(2) + '%';
+  const pos = v => v==null ? '\u2014' : Number(v).toFixed(1);
+
+  let rows = gscFiltered().slice();
+  const {col, dir} = gscSort;
+  rows.sort((a,b) => {
+    const av = col === 'key' ? a.key : (a[col] == null ? -Infinity : a[col]);
+    const bv = col === 'key' ? b.key : (b[col] == null ? -Infinity : b[col]);
+    return av > bv ? dir : av < bv ? -dir : 0;
+  });
+
+  const keyLabel = gscMeta.key_kind === 'page' ? 'Page' : 'Query';
+  const shown = rows.slice(0, 100);
+  const head = [['key',keyLabel],['clicks','Clicks'],['impressions','Impressions'],['ctr','CTR'],['position','Position']]
+    .map(([c,label],i) => `<th onclick="gscSortBy('${c}')" style="text-align:${i?'right':'left'};padding-bottom:.4rem;
+        font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;cursor:pointer;
+        white-space:nowrap">${label}${col===c ? (dir<0?' \u2193':' \u2191') : ''}</th>`).join('');
+
+  const body = shown.map(r => `<tr style="border-top:1px solid var(--accent)">
+      <td style="padding:.4rem 0;font-size:.85rem">
+        <label style="display:flex;gap:.5rem;align-items:flex-start;margin:0;font-weight:400;cursor:pointer">
+          <input type="checkbox" ${gscSelected.has(r.key)?'checked':''} onchange="gscToggle(${JSON.stringify(r.key).replace(/"/g,'&quot;')})"
+                 style="width:auto;margin-top:.2rem;flex:none">
+          <span>${esc(r.key)}</span></label></td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${num(r.clicks)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${num(r.impressions)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${pct(r.ctr)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums">${pos(r.position)}</td>
+    </tr>`).join('');
+
+  const warns = (gscMeta.warnings||[]).map(w => `<li style="margin:.2rem 0">${esc(w)}</li>`).join('');
+
+  const html = `<div class="card">
+    <h3 style="margin-top:0">${rows.length.toLocaleString('en-US')} of ${gscRows.length.toLocaleString('en-US')} ${gscMeta.key_kind === 'page' ? 'pages' : 'queries'}</h3>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin:.75rem 0 1rem">
+      <button onclick="gscSelectTop(10)" class="gsc-chip">Select top 10</button>
+      <button onclick="gscSelectTop(20)" class="gsc-chip">Select top 20</button>
+      <button onclick="gscClearSelection()" class="gsc-chip">Clear selection</button>
+      <span style="align-self:center;font-size:.85rem;color:var(--text-muted)">${gscSelected.size} selected</span>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    ${rows.length > 100 ? `<p style="font-size:.82rem;color:var(--text-muted);margin-top:.75rem">Showing the first 100. Narrow the filters to see more.</p>` : ''}
+    ${warns ? `<h4 style="margin:1.2rem 0 .3rem;font-size:.85rem">Notes</h4><ul style="font-size:.82rem;color:var(--text-muted);margin:0;padding-left:1.1rem">${warns}</ul>` : ''}
+    <p style="font-size:.8rem;color:var(--text-muted);margin-top:1rem">Position is an average per row. Averaging it across a filter would be wrong, so no filtered average is shown.</p>
+  </div>`;
+
+  const outEl = document.getElementById('gsc_out');
+  outEl.style.display = 'none';
+  let host = outEl.nextElementSibling;
+  if(!host || !host.classList.contains('rendered')){
+    host = document.createElement('div'); host.className = 'rendered';
+    outEl.parentNode.insertBefore(host, outEl.nextSibling);
+  }
+  host.innerHTML = html;
 }
 
 async function runAnalytics(){

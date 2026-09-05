@@ -1,0 +1,75 @@
+PLAN — in-app release notes (Headway-style)
+===========================================
+
+WHY NOT HEADWAY ITSELF
+----------------------
+Headway is a hosted widget: an external script, an account, and their branding
+on a page that already sits behind a gate. The pattern is what matters, not
+the vendor. Building it ourselves is a few hours, has no third-party script on
+the page, and keeps the entries in the repo next to the code that changed.
+
+SHAPE
+-----
+- A bell button in the header, beside the title.
+- An unread dot when entries exist that the viewer has not seen.
+- Click opens a panel: entries newest first, each with a date, a category tag
+  and a short body.
+- Opening the panel marks everything up to the newest entry as seen.
+- Escape or a click outside closes it.
+
+DATA
+----
+A RELEASES array in index.html, newest first:
+
+  { date: '2026-09-05',
+    tag: 'new' | 'improved' | 'fixed',
+    title: 'Export CRO results',
+    body: 'Download any CRO score as Markdown or CSV.' }
+
+Written deliberately, not generated from commit messages: commits describe
+code, release notes describe what changed for the person using it. Same
+reason the CRO rubric cites sources rather than paraphrasing them.
+
+Tag colours reuse the existing palette: new uses --primary, improved uses the
+amber already used for warnings, fixed uses --text-muted. No new colours.
+
+READ STATE
+----------
+localStorage key gtm_seen_release, holding the newest date the viewer has
+seen. Wrapped in try/catch like the gate, since storage can throw outright
+where site data is blocked; a failure means the dot shows every visit, which
+is the safe direction.
+
+FIRST ENTRIES (today's shipped work, user-facing wording)
+---------------------------------------------------------
+new       Export CRO results as Markdown or CSV
+new       Compare your landing page against a competitor
+new       Import a GA4 export and match pages to URLs
+improved  URLs work without typing https://
+improved  Every tool explains what it needs, via the ! icons
+improved  Tabs remember their results, and Back returns to the previous tab
+fixed     Pages behind a bot challenge now say so, instead of showing an
+          HTTP error
+
+FAILURE CASES / PRE-MORTEM
+--------------------------
+- A panel that opens over the tab bar makes the app feel broken on a phone.
+  It anchors under the bell and is width-capped, scrolling internally.
+- An unread dot that never clears is worse than no dot. Marking as seen
+  happens on open, not on scroll to the end.
+- Entries written as commit messages read as noise to a marketer. Each line
+  is what changed for them, not what changed in the code.
+- The list grows unbounded. v1 renders the most recent 20.
+- Storage blocked means the dot never clears; acceptable, and it degrades to
+  a permanently available panel rather than a broken one.
+
+VERIFICATION
+------------
+- node --check on the inline script.
+- Dot shows on first load, clears on open, stays cleared after a reload.
+- Panel does not overflow at 375px width.
+- Storage-blocked path does not throw.
+
+FILES TOUCHED
+-------------
+index.html only.
