@@ -11,12 +11,77 @@ Live: https://gtm-predictor-two.vercel.app
 | **PPC** | Budget, channel, region, ICP, ACV, CRO/Creative scores | Full funnel (impressions → won), CAC, ROI |
 | **ABM** | Budget, target accounts, ad format, region, offer | Pipeline range, funnel, CAC, ROI (ZenABM 2026 real data n=211) |
 | **ABM Goal (reverse)** | Target deals, ACV | Spend range needed (median → top performer) |
-| **CRO** | URL or pasted content | Per-dimension 0–10 scorecard + detailed fixes |
+| **CRO** | URL + swipe deck (context + 5-second test) | First-impression verdict + per-dimension 0–10 scorecard + fixes |
 | **Compare** | Your landing page URL + a competitor's | Both scored on the CRO rubric, plus a head-to-head diff |
 | **Analytics import** | GA4 "Pages and screens" CSV export | Parsed page table, optionally matched to a scored URL |
 | **Creative** | Channel, ad copy, image desc | Per-dimension 0–10 + before/after rewrites |
 | **Outbound (cold email)** | Subject, body, goal, LP, open/click rate | Per-dimension 0–10 + rewrites (Polar email as gold standard) |
 | **LTV/CAC** | Simple (CAC + LTV) OR full (ARPU + churn + GM + etc.) | Ratio, verdict, payback, formula derivation |
+
+## CRO impression test
+
+The CRO tab runs a **swipe card deck** (same motion as the sign-in gate) before
+the scorecard. Three layers:
+
+| Layer | What it is | What it produces |
+|---|---|---|
+| **Context** | 2 Yes/No cards | Who is running the test — tailors tone and priority framing |
+| **5-second test** | Timed exposure + 2 recall questions | First-impression data — comprehension and recall |
+| **Scorecard** | Full rubric underneath | Scores and fixes — grounded in the 5-second verdict |
+
+### Deck flow
+
+```
+Card 1   Have you used a CRO tool before?              Yes / No
+Card 2   Have you implemented CRO recommendations?     Yes / No
+
+Card 3   EXPOSURE — page shown for 5 seconds            (countdown, auto-advance)
+
+Card 4   What is this page about?                      (open text)
+Card 5   What words or phrases do you remember?        (open text)
+
+Card 6   VERDICT — comprehension + recall vs page      (pass / partial / fail)
+
+─────── below the deck ───────
+
+         Full CRO scorecard (8 dimensions, fixes, priority rank)
+```
+
+### What feeds what
+
+- **Yes/No answers** do not produce the score. They frame how results are
+  read — e.g. a first-time user gets plain language and low-effort fixes first;
+  someone who has used CRO tools but not implemented gets shorter intros and a
+  knowing-doing gap callout.
+- **5-second answers** are the substance. The page is shown above the fold for
+  five seconds, then hidden. Recall questions capture what encoded in working
+  memory — the same method Maze and Lyssna use, without claiming panel data we
+  do not have.
+- **Scorecard** compares recall to scraped ground truth (headline, category,
+  CTA) and runs the existing 8-dimension rubric. A failed recall surfaces the
+  matching headline or CTA fix at the top.
+
+### Design
+
+- Reuses the gate deck: framer-motion swipe, spring exit, next card peeking
+  behind, progress dots, plain fallback if React/Motion CDN fails.
+- Yes/No cards use two large buttons (no text fields). Recall cards use open
+  text with `onPointerDownCapture` so typing does not fight the drag.
+- Verdict card uses the same done-state animation as the gate ("You're in") —
+  optimised for screenshots (Slack, Instagram, internal design channels).
+
+### Status
+
+**Planned — not shipped yet.** Today the CRO tab is URL in → scorecard only.
+The deck, timed exposure, and verdict layer are the next build.
+
+### Open items
+
+- Above-fold screenshot capture (Firecrawl, ZenRows, or Playwright). Markdown
+  scrape alone is not a true 5-second test.
+- `POST /cro/impression` — accept URL, context answers, recall answers; return
+  verdict + optional chained rubric score.
+- Extract shared `mountSwipeDeck()` from gate and CRO step configs.
 
 ## Data sources used
 
